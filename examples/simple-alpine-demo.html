@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alpine.js Simple Demo - Why It's Perfect for Your Terminal App</title>
+    <!-- Alpine.js - Just one script tag, no build step! -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- TailwindCSS for quick styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-4xl font-bold mb-2">Alpine.js Demo</h1>
+        <p class="text-gray-600 mb-8">A simple, powerful framework perfect for embedded terminal apps</p>
+
+        <!-- Demo 1: Basic Reactivity (Like your connection status) -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6" x-data="{ connected: false, port: 'COM3' }">
+            <h2 class="text-2xl font-bold mb-4">1. Simple Reactivity (Connection Status)</h2>
+            <p class="text-gray-600 mb-4">Toggle connection state - notice how UI updates automatically</p>
+            <div class="flex items-center space-x-4">
+                <button @click="connected = !connected" 
+                        class="px-6 py-2 rounded text-white font-semibold"
+                        :class="connected ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'">
+                    <span x-text="connected ? 'Disconnect' : 'Connect'"></span>
+                </button>
+                <div class="flex items-center space-x-2">
+                    <div class="w-3 h-3 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></div>
+                    <span class="font-semibold" x-text="connected ? 'Connected to ' + port : 'Disconnected'"></span>
+                </div>
+            </div>
+            <pre class="mt-4 p-4 bg-gray-100 rounded text-sm overflow-x-auto"><code>&lt;div x-data="{ connected: false }"&gt;
+  &lt;button @click="connected = !connected"&gt;
+    &lt;span x-text="connected ? 'Disconnect' : 'Connect'"&gt;&lt;/span&gt;
+  &lt;/button&gt;
+&lt;/div&gt;</code></pre>
+        </div>
+
+        <!-- Demo 2: Lists (Like command history) -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6" 
+             x-data="{ 
+                 commands: ['help', 'version', 'shell stats'],
+                 newCommand: ''
+             }">
+            <h2 class="text-2xl font-bold mb-4">2. Dynamic Lists (Command History)</h2>
+            <p class="text-gray-600 mb-4">Add commands and see the list update automatically</p>
+            <div class="mb-4 flex space-x-2">
+                <input type="text" 
+                       x-model="newCommand"
+                       @keyup.enter="if(newCommand.trim()) { commands.unshift(newCommand); newCommand = ''; }"
+                       placeholder="Enter command and press Enter"
+                       class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button @click="if(newCommand.trim()) { commands.unshift(newCommand); newCommand = ''; }"
+                        class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Add
+                </button>
+            </div>
+            <ul class="space-y-2">
+                <template x-for="(cmd, index) in commands" :key="index">
+                    <li class="p-3 bg-gray-50 rounded flex justify-between items-center">
+                        <span class="font-mono" x-text="cmd"></span>
+                        <button @click="commands.splice(index, 1)" 
+                                class="text-red-500 hover:text-red-700 text-sm">
+                            Remove
+                        </button>
+                    </li>
+                </template>
+            </ul>
+            <pre class="mt-4 p-4 bg-gray-100 rounded text-sm overflow-x-auto"><code>&lt;template x-for="cmd in commands"&gt;
+  &lt;li x-text="cmd"&gt;&lt;/li&gt;
+&lt;/template&gt;</code></pre>
+        </div>
+
+        <!-- Demo 3: Conditional Rendering (Like settings panel) -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6" x-data="{ showSettings: false }">
+            <h2 class="text-2xl font-bold mb-4">3. Show/Hide (Settings Panel)</h2>
+            <p class="text-gray-600 mb-4">Toggle visibility - perfect for settings, modals, etc.</p>
+            <button @click="showSettings = !showSettings" 
+                    class="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 mb-4">
+                <span x-text="showSettings ? 'Hide Settings' : 'Show Settings'"></span>
+            </button>
+            <div x-show="showSettings" 
+                 x-transition
+                 class="p-4 bg-gray-50 rounded border">
+                <h3 class="font-bold mb-2">Settings</h3>
+                <div class="space-y-2">
+                    <div>
+                        <label class="block text-sm font-medium">Baud Rate:</label>
+                        <select class="mt-1 p-2 border rounded w-full">
+                            <option>9600</option>
+                            <option>115200</option>
+                            <option>230400</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium">Port:</label>
+                        <input type="text" value="COM3" class="mt-1 p-2 border rounded w-full">
+                    </div>
+                </div>
+            </div>
+            <pre class="mt-4 p-4 bg-gray-100 rounded text-sm overflow-x-auto"><code>&lt;div x-show="showSettings" x-transition&gt;
+  Settings panel content
+&lt;/div&gt;</code></pre>
+        </div>
+
+        <!-- Demo 4: Real-time Updates (Like terminal output) -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6" 
+             x-data="{ 
+                 messages: [],
+                 addMessage() { 
+                     this.messages.push('[' + new Date().toLocaleTimeString() + '] Device message'); 
+                 }
+             }"
+             x-init="setInterval(() => addMessage(), 2000)">
+            <h2 class="text-2xl font-bold mb-4">4. Real-time Updates (Terminal Output)</h2>
+            <p class="text-gray-600 mb-4">Messages appear automatically - simulates serial data streaming</p>
+            <div class="bg-black text-green-400 p-4 rounded font-mono text-sm h-48 overflow-y-auto">
+                <template x-for="(msg, index) in messages" :key="index">
+                    <div x-text="msg" class="mb-1"></div>
+                </template>
+                <div x-show="messages.length === 0" class="text-gray-500">
+                    Waiting for messages...
+                </div>
+            </div>
+            <pre class="mt-4 p-4 bg-gray-100 rounded text-sm overflow-x-auto"><code>&lt;template x-for="msg in messages"&gt;
+  &lt;div x-text="msg"&gt;&lt;/div&gt;
+&lt;/template&gt;</code></pre>
+        </div>
+
+        <!-- Demo 5: WebSocket-like Communication (Simplified) -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6" 
+             x-data="{ 
+                 ws: null,
+                 connected: false,
+                 messages: [],
+                 connect() {
+                     // In real app, this would connect to FastAPI WebSocket
+                     this.connected = true;
+                     this.messages.push('Connected to backend');
+                 },
+                 disconnect() {
+                     this.connected = false;
+                     this.messages.push('Disconnected');
+                 },
+                 sendCommand(cmd) {
+                     if (this.connected) {
+                         this.messages.push('Sending: ' + cmd);
+                         // In real app: this.ws.send(cmd);
+                     }
+                 }
+             }">
+            <h2 class="text-2xl font-bold mb-4">5. WebSocket Integration (Simplified)</h2>
+            <p class="text-gray-600 mb-4">Easy integration with WebSocket for real-time serial communication</p>
+            <div class="flex space-x-2 mb-4">
+                <button @click="connect()" 
+                        :disabled="connected"
+                        class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-300">
+                    Connect
+                </button>
+                <button @click="disconnect()" 
+                        :disabled="!connected"
+                        class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-300">
+                    Disconnect
+                </button>
+                <button @click="sendCommand('help')" 
+                        :disabled="!connected"
+                        class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300">
+                    Send Command
+                </button>
+            </div>
+            <div class="bg-gray-100 p-4 rounded min-h-32">
+                <template x-for="(msg, index) in messages" :key="index">
+                    <div x-text="msg" class="mb-1"></div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Key Benefits -->
+        <div class="bg-blue-50 p-6 rounded-lg border border-blue-200">
+            <h2 class="text-2xl font-bold mb-4">Why Alpine.js is Perfect for Your Terminal App</h2>
+            <ul class="space-y-2 text-gray-700">
+                <li class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span><strong>No build step:</strong> Just include one script tag, edit HTML/JS directly</span>
+                </li>
+                <li class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span><strong>Simple syntax:</strong> Embedded teams can learn it in minutes</span>
+                </li>
+                <li class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span><strong>Reactive:</strong> UI updates automatically when data changes</span>
+                </li>
+                <li class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span><strong>Lightweight:</strong> Only ~15KB, no virtual DOM overhead</span>
+                </li>
+                <li class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span><strong>Works with xterm.js:</strong> Perfect for terminal emulation</span>
+                </li>
+                <li class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span><strong>Easy debugging:</strong> No transpilation, works directly in browser DevTools</span>
+                </li>
+                <li class="flex items-start">
+                    <span class="text-green-500 mr-2">✓</span>
+                    <span><strong>CDN friendly:</strong> No npm/node.js required</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Comparison -->
+        <div class="mt-6 bg-white p-6 rounded-lg shadow">
+            <h2 class="text-2xl font-bold mb-4">Comparison</h2>
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="border-b">
+                        <th class="p-2">Feature</th>
+                        <th class="p-2">Alpine.js</th>
+                        <th class="p-2">React</th>
+                        <th class="p-2">Vue</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="border-b">
+                        <td class="p-2">Size</td>
+                        <td class="p-2 text-green-600">~15KB</td>
+                        <td class="p-2 text-red-600">~130KB+</td>
+                        <td class="p-2 text-yellow-600">~35KB</td>
+                    </tr>
+                    <tr class="border-b">
+                        <td class="p-2">Build Step</td>
+                        <td class="p-2 text-green-600">No</td>
+                        <td class="p-2 text-red-600">Yes (webpack/vite)</td>
+                        <td class="p-2 text-yellow-600">Optional</td>
+                    </tr>
+                    <tr class="border-b">
+                        <td class="p-2">Learning Curve</td>
+                        <td class="p-2 text-green-600">Easy</td>
+                        <td class="p-2 text-red-600">Steep</td>
+                        <td class="p-2 text-yellow-600">Moderate</td>
+                    </tr>
+                    <tr class="border-b">
+                        <td class="p-2">CDN Ready</td>
+                        <td class="p-2 text-green-600">Yes</td>
+                        <td class="p-2 text-red-600">No (needs build)</td>
+                        <td class="p-2 text-green-600">Yes</td>
+                    </tr>
+                    <tr>
+                        <td class="p-2">Best For</td>
+                        <td class="p-2">Simple apps, embedded teams</td>
+                        <td class="p-2">Complex SPAs, large teams</td>
+                        <td class="p-2">Medium complexity apps</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
+
