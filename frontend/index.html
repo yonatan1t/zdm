@@ -57,26 +57,21 @@
         <div class="flex-1 min-h-0">            <div id="terminal" class="w-full h-full"></div>
         </div>
 
-        <div x-show="showSettings" 
-             x-transition:enter="ease-out duration-300"
-             x-transition:enter-start="opacity-0"
-             x-transition:enter-end="opacity-100"
-             x-transition:leave="ease-in duration-200"
-             x-transition:leave-start="opacity-100"
-             x-transition:leave-end="opacity-0"
-             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-             @click.self="showSettings = false"
-             style="display: none;">
-            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md"
-                 @click.stop
-                 x-show="showSettings"
-                 x-transition:enter="ease-out duration-300"
-                 x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
-                 x-transition:leave="ease-in duration-200"
-                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
-                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95">
-                <div class="flex items-center justify-between mb-4">
+        <div x-show="showSettings" class="fixed inset-0 z-50" style="display: none;">
+            <!-- Backdrop -->
+            <div class="absolute inset-0 bg-black bg-opacity-50" @click="showSettings = false"></div>
+
+            <!-- Slide-in Sidebar -->
+            <aside class="absolute right-0 top-0 h-full w-full sm:w-96 max-w-md bg-white shadow-xl overflow-auto"
+                   @click.stop
+                   x-show="showSettings"
+                   x-transition:enter="transform transition ease-out duration-300"
+                   x-transition:enter-start="translate-x-full"
+                   x-transition:enter-end="translate-x-0"
+                   x-transition:leave="transform transition ease-in duration-200"
+                   x-transition:leave-start="translate-x-0"
+                   x-transition:leave-end="translate-x-full">
+                <div class="flex items-center justify-between mb-4 px-4 pt-4">
                     <h2 class="text-2xl font-bold">Serial Port Settings</h2>
                     <button @click="showSettings = false" 
                             class="text-gray-400 hover:text-gray-600">
@@ -86,7 +81,7 @@
                     </button>
                 </div>
 
-                <div class="space-y-4">
+                <div class="space-y-4 px-4 pb-6">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Serial Port
@@ -153,7 +148,7 @@
                         </button>
                     </div>
                 </div>
-            </div>
+            </aside>
         </div>
     </div>
 </body>
