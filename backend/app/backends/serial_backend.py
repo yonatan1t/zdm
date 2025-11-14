@@ -6,16 +6,7 @@ import os
 import glob
 from typing import Optional, Callable
 from .base import BaseBackend
-
-# Import termios for terminal control (Linux/Unix only)
-try:
-    import termios
-    import fcntl
-    import select
-    TERMIOS_AVAILABLE = True
-except ImportError:
-    TERMIOS_AVAILABLE = False
-    select = None
+import select
 
 
 class SerialBackend(BaseBackend):
@@ -42,64 +33,19 @@ class SerialBackend(BaseBackend):
             if self.serial_port and self.serial_port.is_open:
                 await self.disconnect()
             
-            # Check if this is a pseudo-terminal (pts)
-            is_pts = '/dev/pts/' in port or port.startswith('/dev/pts/')
-            
             # Configure serial port parameters
-            # For pseudo-terminals, use a longer timeout to allow blocking reads
-            # This ensures we wait for data to arrive
+            # Use a short, non-blocking timeout. The read loop will handle waiting.
             serial_params = {
                 'port': port,
-                'timeout': 0.5 if is_pts else 1,  # Longer timeout for pts to allow blocking reads
+                'baudrate': baudrate,
+                'timeout': 0.1,
                 'write_timeout': 1,
             }
-            
-            # For pseudo-terminals, baudrate doesn't matter, but pyserial requires it
-            # Use a default baudrate but the pts will ignore it
-            if not is_pts:
-                serial_params['baudrate'] = baudrate
-            else:
-                # Pseudo-terminals don't use baudrate, but pyserial needs it
-                serial_params['baudrate'] = 115200
-            
-            # Add any additional parameters
             serial_params.update(kwargs)
             
             self.serial_port = serial.Serial(**serial_params)
-            
-            # For pseudo-terminals, set to raw mode if possible
-            # This is important for Zephyr native sim
-            if is_pts and TERMIOS_AVAILABLE:
-                try:
-                    # Get current terminal settings
-                    fd = self.serial_port.fileno()
-                    attrs = termios.tcgetattr(fd)
-                    
-                    # Set raw mode: no echo, no canonical mode, no signals
-                    attrs[3] = attrs[3] & ~(termios.ECHO | termios.ICANON | termios.ISIG)
-                    attrs[0] = attrs[0] & ~(termios.IGNBRK | termios.BRKINT | termios.PARMRK | 
-                                           termios.ISTRIP | termios.INLCR | termios.IGNCR | 
-                                           termios.ICRNL | termios.IXON)
-                    # Disable output processing (e.g., newline translation)
-                    # This is CRITICAL for socat/pseudo-terminals
-                    attrs[1] = attrs[1] & ~termios.OPOST
-                    attrs[1] = attrs[1] & ~termios.OPOST
-                    attrs[2] = attrs[2] & ~(termios.CSIZE | termios.PARENB)
-                    attrs[2] = attrs[2] | termios.CS8
-                    
-                    # Set VMIN and VTIME for blocking reads with timeout
-                    # VMIN=0: don't require minimum bytes (allows timeout to work)
-                    # VTIME=5: 0.5 second timeout (in deciseconds)
-                    # This works with pyserial's timeout mechanism
-                    attrs[6][termios.VMIN] = 0
-                    attrs[6][termios.VTIME] = 5  # 0.5 seconds
-                    
-                    termios.tcsetattr(fd, termios.TCSANOW, attrs)
-                    print(f"Set raw mode with VMIN=0, VTIME=5 for pseudo-terminal {port}")
-                except Exception as e:
-                    print(f"Warning: Could not set raw mode for pseudo-terminal: {e}")
-                    # Continue anyway - it might still work
-            
+            print(f"Connected to {port} at {baudrate} baud.")
+
             self._connected = True
             
             # Start reading task
@@ -162,90 +108,35 @@ class SerialBackend(BaseBackend):
     
     async def _read_loop(self) -> None:
         """Background task to read data from serial port."""
-        is_pts = self.serial_port and '/dev/pts/' in self.serial_port.port if self.serial_port else False
-        
-        print(f"Read loop started for {'PTS' if is_pts else 'serial'} port: {self.serial_port.port if self.serial_port else 'None'}")
-        print(f"Callback set: {self.data_callback is not None}")
-        
+        print(f"Read loop started for: {self.serial_port.port if self.serial_port else 'None'}")
         loop = asyncio.get_event_loop()
         
         while self._connected:
             try:
                 if not self.serial_port or not self.serial_port.is_open:
-                    print("Serial port not open, exiting read loop")
+                    print("Serial port closed, exiting read loop.")
                     break
                 
-                # Use select for pseudo-terminals to wait for data
-                # This is more reliable than polling in_waiting
                 def blocking_read():
-                    """Blocking read that waits for data with timeout."""
+                    """Blocking read that waits for data based on pyserial timeout."""
                     try:
-                        if is_pts and select:
-                            # Use select to wait for data to be available
-                            # This is more reliable for pseudo-terminals
-                            fd = self.serial_port.fileno()
-                            ready, _, _ = select.select([fd], [], [], 0.1)  # 0.1 second timeout
-                            if ready:
-                                # Data is available, read it
-                                if self.serial_port.in_waiting > 0:
-                                    return self.serial_port.read(self.serial_port.in_waiting)
-                                else:
-                                    # Even if in_waiting is 0, try reading (data might be there)
-                                    return self.serial_port.read(4096)
-                            else:
-                                # Timeout, no data available
-                                return b''
-                        else:
-                            # For real serial ports or if select is not available
-                            if self.serial_port.in_waiting > 0:
-                                return self.serial_port.read(self.serial_port.in_waiting)
-                            else:
-                                # Try a blocking read with timeout
-                                return self.serial_port.read(1)
-                    except serial.SerialTimeoutException:
-                        return b''
-                    except Exception as e:
-                        print(f"Error in blocking_read: {e}")
-                        import traceback
-                        traceback.print_exc()
+                        # Read available data, up to a large chunk size.
+                        # This will block for up to `timeout` seconds (set in connect).
+                        return self.serial_port.read(self.serial_port.in_waiting or 4096)
+                    except (serial.SerialException, OSError) as e:
+                        # This can happen if the device is disconnected.
+                        print(f"Read error, disconnecting: {e}")
+                        self._connected = False
                         return b''
                 
-                # Read data in executor (non-blocking for async loop)
                 data = await loop.run_in_executor(None, blocking_read)
                 
                 if data:
-                    # Read any additional data that became available while we were reading
-                    while True:
-                        try:
-                            if self.serial_port.in_waiting > 0:
-                                additional_data = await loop.run_in_executor(
-                                    None,
-                                    lambda: self.serial_port.read(min(self.serial_port.in_waiting, 4096))
-                                )
-                                if additional_data:
-                                    data += additional_data
-                                else:
-                                    break
-                            else:
-                                break
-                        except:
-                            break
-                    
-                    if data:
-                        if self.data_callback:
-                            try:
-                                self.data_callback(data)
-                                # Only log occasionally to reduce noise
-                                # print(f"Read {len(data)} bytes -> callback")
-                            except Exception as e:
-                                print(f"ERROR in callback: {e}")
-                                import traceback
-                                traceback.print_exc()
-                        else:
-                            print(f"WARNING: Read {len(data)} bytes but callback is None!")
+                    if self.data_callback:
+                        self.data_callback(data)
                 else:
                     # No data received, small sleep to prevent busy loop
-                    await asyncio.sleep(0.001 if is_pts else 0.01)
+                    await asyncio.sleep(0.01)
                         
             except asyncio.CancelledError:
                 print("Read loop cancelled")
