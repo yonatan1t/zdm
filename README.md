@@ -2,6 +2,10 @@
 
 A web-based serial terminal application for Zephyr RTOS development and debugging.
 
+![ZDM Screenshot](doc/image.png)
+
+
+
 ## Features
 
 - **Serial Port Communication**: Connect to Zephyr devices via serial ports
@@ -191,4 +195,3 @@ No build tools or npm required - just edit the HTML/JS files and refresh!
 ## Contributing
 
 [Contributing Guidelines Here]
-
