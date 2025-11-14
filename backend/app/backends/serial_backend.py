@@ -80,6 +80,9 @@ class SerialBackend(BaseBackend):
                     attrs[0] = attrs[0] & ~(termios.IGNBRK | termios.BRKINT | termios.PARMRK | 
                                            termios.ISTRIP | termios.INLCR | termios.IGNCR | 
                                            termios.ICRNL | termios.IXON)
+                    # Disable output processing (e.g., newline translation)
+                    # This is CRITICAL for socat/pseudo-terminals
+                    attrs[1] = attrs[1] & ~termios.OPOST
                     attrs[1] = attrs[1] & ~termios.OPOST
                     attrs[2] = attrs[2] & ~(termios.CSIZE | termios.PARENB)
                     attrs[2] = attrs[2] | termios.CS8
@@ -269,4 +272,3 @@ class SerialBackend(BaseBackend):
                 "hwid": port.hwid,
             })
         return ports
-

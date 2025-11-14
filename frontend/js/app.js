@@ -18,10 +18,9 @@ function terminalApp() {
         ws: null,
         terminal: null,
         
-        // Initialize application
+        // Initialize application (Now handles status checks/port loading)
         async init() {
-            // Initialize terminal
-            this.initTerminal();
+            console.log("init() called");
             
             // Load available ports
             await this.loadPorts();
@@ -30,51 +29,49 @@ function terminalApp() {
             await this.checkStatus();
         },
         
-        // Initialize xterm.js terminal
-        initTerminal() {
-            const Terminal = window.Terminal;
-            const FitAddon = window.FitAddon;
-            
-            this.terminal = new Terminal({
+        // Initialize xterm.js terminalS
+        initTerminal(fit) {
+            console.log("initTerminal() called");
+            if (!window.Terminal) {
+                console.error("xterm.js not loaded!");
+                return;
+            }
+
+            // Defer initialization using $nextTick from the HTML for sizing stability
+            // ...
+
+            const term = new window.Terminal({
                 cursorBlink: true,
-                fontSize: 14,
-                fontFamily: 'Consolas, "Courier New", monospace',
-                theme: {
-                    background: '#1e1e1e',
-                    foreground: '#d4d4d4',
-                    cursor: '#aeafad',
-                    black: '#1e1e1e',
-                    red: '#f44747',
-                    green: '#4ec9b0',
-                    yellow: '#dcdcaa',
-                    blue: '#569cd6',
-                    magenta: '#c586c0',
-                    cyan: '#4ec9b0',
-                    white: '#d4d4d4',
-                }
+                theme: { background: '#1e1e1e', foreground: '#d4d4d4' }
             });
-            
-            const fitAddon = new FitAddon.FitAddon();
-            this.terminal.loadAddon(fitAddon);
-            
-            const terminalElement = document.getElementById('terminal');
-            this.terminal.open(terminalElement);
+
+            const fitAddon = new window.FitAddon.FitAddon();
+            term.loadAddon(fitAddon);
+
+            const el = document.getElementById('terminal');
+            term.open(el);
+
             fitAddon.fit();
             
-            // Handle window resize
             window.addEventListener('resize', () => {
                 fitAddon.fit();
             });
+
+            term.writeln("✅ Terminal initialized successfully and fitted");
+
+            this.terminal = term;   // <-- critical line
             
-            // Handle terminal input
-            this.terminal.onData((data) => {
+            // 💡 NEW CODE BLOCK START: Enable User Input (Tx)
+            // Add event listener to send input data to the WebSocket
+            term.onData(data => {
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    // Send the raw data (keystrokes) directly to the server via WebSocket
                     this.ws.send(data);
+                } else {
+                    console.warn('Cannot send data: WebSocket is not open.');
                 }
             });
-            
-            this.terminal.writeln('Zephyr Device Manager Terminal');
-            this.terminal.writeln('Click "Settings" to configure serial port connection.');
+            // 💡 NEW CODE BLOCK END
         },
         
         // Load available serial ports
@@ -124,8 +121,11 @@ function terminalApp() {
         
         // Save settings and connect
         async saveSettings() {
-            if (!this.selectedPort) {
-                this.showStatus('Please select a serial port', 'error');
+            // Use manualPort if it has a value, otherwise use selectedPort from dropdown
+            const portToConnect = this.manualPort || this.selectedPort;
+
+            if (!portToConnect) {
+                this.showStatus('Please select or enter a serial port', 'error');
                 return;
             }
             
@@ -145,7 +145,7 @@ function terminalApp() {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        port: this.selectedPort,
+                        port: portToConnect,
                         baudrate: parseInt(this.baudRate)
                     })
                 });
@@ -154,9 +154,9 @@ function terminalApp() {
                 
                 if (data.status === 'connected') {
                     this.connected = true;
-                    this.currentPort = this.selectedPort;
+                    this.currentPort = portToConnect;
                     this.showSettings = false;
-                    this.showStatus('Connected to ' + this.selectedPort, 'success');
+                    this.showStatus('Connected to ' + portToConnect, 'success');
                     
                     // Connect WebSocket
                     this.connectWebSocket();
@@ -300,4 +300,3 @@ function terminalApp() {
         }
     };
 }
-
