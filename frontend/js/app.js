@@ -14,6 +14,17 @@ function terminalApp() {
         connecting: false,
         currentPort: '',
         
+        // Command Discovery State
+        showCommands: false,
+        commands: [],
+        loadingCommands: false,
+        commandsCache: null,
+        lastScannedTime: null,
+        commandDiscoveryInProgress: false,
+        discoveryCollectedData: '',
+        selectedCommand: null,
+        showCommandPanel: false,
+        
         // WebSocket and Terminal
         ws: null,
         terminal: null,
@@ -210,6 +221,11 @@ function terminalApp() {
                                 event.data.length > 0 ? `"${event.data.substring(0, Math.min(50, event.data.length))}"` : '(empty)');
                 }
                 
+                // Collect data during command discovery
+                if (this.commandDiscoveryInProgress) {
+                    this.discoveryCollectedData += event.data;
+                }
+                
                 // Check if message is JSON (error message)
                 // Only check if it starts with '{' and is short (JSON errors are short)
                 if (event.data.length < 100 && event.data.trim().startsWith('{')) {
@@ -297,6 +313,283 @@ function terminalApp() {
             setTimeout(() => {
                 this.statusMessage = '';
             }, 5000);
+        },
+        
+        // ============ COMMAND DISCOVERY SYSTEM ============
+        
+        // Load cached commands from localStorage
+        loadCachedCommands() {
+            const cached = localStorage.getItem('zephyr_commands_cache');
+            if (cached) {
+                this.commandsCache = JSON.parse(cached);
+                this.commands = this.commandsCache.commands || [];
+                this.lastScannedTime = this.commandsCache.lastScanned;
+                return true;
+            }
+            return false;
+        },
+        
+        // Save commands to localStorage
+        saveCachedCommands(commands) {
+            const cache = {
+                commands: commands,
+                lastScanned: new Date().toISOString(),
+                version: '1.0'
+            };
+            localStorage.setItem('zephyr_commands_cache', JSON.stringify(cache));
+            this.commandsCache = cache;
+            this.commands = commands;
+            this.lastScannedTime = cache.lastScanned;
+        },
+        
+        // Scan and discover commands
+        async scanCommands() {
+            if (!this.connected) {
+                this.showStatus('Must be connected to scan commands', 'error');
+                return;
+            }
+            
+            this.loadingCommands = true;
+            this.showStatus('Scanning commands...', 'info');
+            
+            try {
+                // Try to load cache first (for fast startup)
+                if (this.loadCachedCommands()) {
+                    this.showStatus('Loaded cached commands from ' + new Date(this.lastScannedTime).toLocaleString(), 'success');
+                    this.showCommands = true;
+                    this.loadingCommands = false;
+                    return;
+                }
+                
+                // Initiate discovery
+                this.commandDiscoveryInProgress = true;
+                this.discoveryCollectedData = '';
+                
+                console.log('Starting command discovery...');
+                
+                // Send 'help' command to get list of commands
+                this.sendDiscoveryCommand('help\n');
+                
+                // Wait for discovery to complete (with timeout)
+                await this.waitForDiscoveryCompletion(30000);
+                
+                this.showStatus('Commands scanned successfully!', 'success');
+                this.showCommands = true;
+            } catch (error) {
+                console.error('Error scanning commands:', error);
+                this.showStatus('Error scanning commands: ' + error.message, 'error');
+                console.log('Collected data:', this.discoveryCollectedData.substring(0, 500));
+            } finally {
+                this.loadingCommands = false;
+                this.commandDiscoveryInProgress = false;
+            }
+        },
+        
+        // Toggle commands view or scan
+        toggleCommands() {
+            if (this.commands.length > 0) {
+                this.showCommands = true;
+            } else {
+                this.scanCommands();
+            }
+        },
+        
+        // Send command during discovery
+        sendDiscoveryCommand(command) {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(command);
+            }
+        },
+        
+        // Wait for discovery to complete
+        waitForDiscoveryCompletion(timeout) {
+            return new Promise((resolve, reject) => {
+                const startTime = Date.now();
+                let lastDataLength = 0;
+                let noDataChangedCount = 0;
+                let resolved = false;
+                
+                const checkCompletion = () => {
+                    if (resolved) return; // Prevent multiple resolutions
+                    
+                    console.log(`Discovery check: data length = ${this.discoveryCollectedData.length}, timeout in ${timeout - (Date.now() - startTime)}ms`);
+                    
+                    // Check if we have help output with commands
+                    if (this.discoveryCollectedData.includes('Available commands:')) {
+                        // Parse the help output
+                        const parsed = this.parseHelpOutput(this.discoveryCollectedData);
+                        
+                        console.log(`Found ${parsed.length} commands`);
+                        
+                        if (parsed.length > 0) {
+                            // Successfully got command list
+                            resolved = true;
+                            this.commands = parsed;
+                            this.saveCachedCommands(parsed);
+                            this.commandDiscoveryInProgress = false;
+                            console.log('✓ Discovery successful with', parsed.length, 'commands');
+                            resolve();
+                            return;
+                        }
+                    }
+                    
+                    // Check if data has stopped changing (no new data for 2 seconds)
+                    if (this.discoveryCollectedData.length === lastDataLength) {
+                        noDataChangedCount++;
+                        if (noDataChangedCount >= 4) { // 2 seconds with no change
+                            console.log('No new data for 2 seconds, treating as complete');
+                            const parsed = this.parseHelpOutput(this.discoveryCollectedData);
+                            if (parsed.length > 0) {
+                                resolved = true;
+                                this.commands = parsed;
+                                this.saveCachedCommands(parsed);
+                                console.log('✓ Discovery successful (data stable) with', parsed.length, 'commands');
+                                resolve();
+                                return;
+                            } else {
+                                // No commands found - reject instead of looping
+                                resolved = true;
+                                console.log('✗ Data stable but no commands found. Raw data length:', this.discoveryCollectedData.length);
+                                reject(new Error('No commands found in help output'));
+                                return;
+                            }
+                        }
+                    } else {
+                        noDataChangedCount = 0;
+                        lastDataLength = this.discoveryCollectedData.length;
+                    }
+                    
+                    // Check timeout
+                    if (Date.now() - startTime > timeout) {
+                        resolved = true;
+                        console.log('✗ Timeout reached. Final data length:', this.discoveryCollectedData.length);
+                        reject(new Error('Command discovery timeout - no valid help output received'));
+                        return;
+                    }
+                    
+                    // Try again in 500ms
+                    setTimeout(checkCompletion, 500);
+                };
+                
+                checkCompletion();
+            });
+        },
+        
+        // Parse 'help' command output to extract command list
+        parseHelpOutput(helpText) {
+            // Remove ANSI escape codes (like [1;32m, [24C, etc)
+            const cleanText = helpText.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[[0-9]*C/g, '');
+            
+            const lines = cleanText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            const commands = [];
+            let inCommandSection = false;
+
+            console.log('=== PARSING HELP OUTPUT ===');
+            console.log('Total non-empty lines:', lines.length);
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                if (line.includes('Available commands:')) {
+                    inCommandSection = true;
+                    console.log(`✓ Found section marker at line ${i}`);
+                    console.log('Next 10 lines after marker:');
+                    for (let j = i + 1; j < Math.min(i + 11, lines.length); j++) {
+                        console.log(`  [${j}] "${lines[j]}"`);
+                    }
+                    continue;
+                }
+
+                if (inCommandSection) {
+                    // Match command line: "command_name            : Description here"
+                    // After trimming, the format is: "command_name ... : description"
+                    const cmdMatch = line.match(/^(\w[\w_]*)\s+:\s*(.*)$/);
+                    
+                    if (cmdMatch) {
+                        const cmdName = cmdMatch[1];
+                        let cmdDesc = cmdMatch[2].trim();
+                        
+                        // Look ahead for continuation lines
+                        for (let j = i + 1; j < lines.length; j++) {
+                            const nextLine = lines[j];
+                            
+                            // Stop if we hit another command (word followed by colon)
+                            if (nextLine.match(/^(\w[\w_]*)\s+:/)) {
+                                break;
+                            }
+                            
+                            // If it's clearly not a continuation, stop
+                            if (nextLine.includes(':')) {
+                                break;
+                            }
+                            
+                            // Add continuation
+                            cmdDesc += ' ' + nextLine;
+                            i = j; // Skip these lines
+                        }
+                        
+                        commands.push({
+                            id: cmdName,
+                            name: cmdName,
+                            description: cmdDesc,
+                            usage: '',
+                            helpText: '',
+                            args: []
+                        });
+                        
+                        console.log(`  ✓ [${cmdName}] "${cmdDesc.substring(0, 50)}..."`);
+                    } else if (line.match(/^(\w[\w_]*)\s+:/)) {
+                        // This is a command but regex didn't match - debug it
+                        console.log(`  ⚠ Regex mismatch for: "${line.substring(0, 60)}"`);
+                    }
+                }
+            }
+
+            console.log(`=== RESULT: ${commands.length} commands found ===`);
+            if (commands.length > 0) {
+                console.log('Commands:', commands.map(c => c.name).join(', '));
+            }
+            return commands;
+        },
+        
+        // Export commands to JSON file
+        exportCommands() {
+            const dataStr = JSON.stringify(this.commandsCache || { commands: this.commands, lastScanned: new Date().toISOString() }, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `zephyr_commands_${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        },
+        
+        // Import commands from JSON file
+        importCommands(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.commands && Array.isArray(data.commands)) {
+                        this.saveCachedCommands(data.commands);
+                        this.showStatus('Commands imported successfully!', 'success');
+                    } else {
+                        this.showStatus('Invalid commands format', 'error');
+                    }
+                } catch (error) {
+                    this.showStatus('Error importing commands: ' + error.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+        },
+        
+        // Clear cached commands
+        clearCommandsCache() {
+            localStorage.removeItem('zephyr_commands_cache');
+            this.commands = [];
+            this.commandsCache = null;
+            this.lastScannedTime = null;
+            this.showStatus('Commands cache cleared', 'info');
         }
     };
 }
