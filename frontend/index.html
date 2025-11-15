@@ -106,25 +106,79 @@
                     </div>
                 </div>
 
-                <!-- Commands List -->
+                <!-- Commands List or Executor -->
                 <div class="flex-1 overflow-y-auto p-4">
+                    <!-- Loading State -->
                     <div x-show="loadingCommands" class="flex items-center justify-center py-8">
                         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
                     </div>
                     
+                    <!-- Empty State -->
                     <div x-show="!loadingCommands && commands.length === 0" class="text-center py-8 text-gray-500">
                         <p>No commands scanned.</p>
                         <p class="text-sm mt-2">Click "Scan" to discover commands.</p>
                     </div>
 
-                    <div x-show="!loadingCommands && commands.length > 0" class="space-y-2">
+                    <!-- Commands List -->
+                    <div x-show="!loadingCommands && commands.length > 0 && !selectedCommand" class="space-y-2">
                         <template x-for="cmd in commands" :key="cmd.id">
-                            <button @click="selectedCommand = cmd; showCommandPanel = true"
+                            <button @click="selectedCommand = cmd"
                                     class="w-full text-left p-3 rounded border border-gray-200 hover:bg-gray-100 transition">
                                 <div class="font-semibold text-gray-900" x-text="cmd.name"></div>
                                 <div class="text-sm text-gray-600" x-text="cmd.description"></div>
                             </button>
                         </template>
+                    </div>
+
+                    <!-- Command Executor Panel -->
+                    <div x-show="selectedCommand" class="space-y-4">
+                        <button @click="selectedCommand = null" class="text-blue-600 hover:text-blue-800 text-sm flex items-center">
+                            <span>← Back to Commands</span>
+                        </button>
+                        
+                        <div class="bg-gray-100 p-3 rounded">
+                            <h3 class="font-bold text-lg text-gray-900" x-text="selectedCommand?.name"></h3>
+                            <p class="text-sm text-gray-600 mt-1" x-text="selectedCommand?.description"></p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Usage</label>
+                            <p class="text-sm text-gray-600 font-mono" x-text="selectedCommand?.usage || 'No usage info'"></p>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div x-show="selectedCommand?.args && selectedCommand.args.length > 0">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Arguments</label>
+                                <template x-for="arg in selectedCommand?.args" :key="arg.id">
+                                    <div class="mb-2">
+                                        <label class="block text-sm text-gray-600 mb-1">
+                                            <span x-text="arg.name"></span>
+                                            <span x-show="!arg.required" class="text-gray-400 text-xs">(optional)</span>
+                                        </label>
+                                        <input type="text" 
+                                               placeholder="Enter value..."
+                                               class="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                               @change="if (!commandArgs) commandArgs = {}; commandArgs[arg.id] = $event.target.value">
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2 pt-2">
+                            <button @click="executeCommand(selectedCommand)" 
+                                    class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded">
+                                Execute
+                            </button>
+                            <button @click="selectedCommand = null" 
+                                    class="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-900 font-medium rounded">
+                                Cancel
+                            </button>
+                        </div>
+
+                        <div x-show="commandResult" class="mt-3 p-3 bg-gray-900 text-gray-100 rounded text-sm font-mono max-h-32 overflow-y-auto">
+                            <p class="text-xs text-gray-400 mb-1">Result:</p>
+                            <p x-text="commandResult"></p>
+                        </div>
                     </div>
                 </div>
 

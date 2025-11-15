@@ -23,7 +23,8 @@ function terminalApp() {
         commandDiscoveryInProgress: false,
         discoveryCollectedData: '',
         selectedCommand: null,
-        showCommandPanel: false,
+        commandArgs: {},
+        commandResult: '',
         
         // WebSocket and Terminal
         ws: null,
@@ -391,6 +392,38 @@ function terminalApp() {
                 this.showCommands = true;
             } else {
                 this.scanCommands();
+            }
+        },
+        
+        // Execute a command with args
+        executeCommand(command) {
+            if (!command) {
+                this.showStatus('No command selected', 'error');
+                return;
+            }
+            
+            // Build command string with args
+            let cmdString = command.name;
+            if (this.commandArgs && Object.keys(this.commandArgs).length > 0) {
+                for (const [argId, argValue] of Object.entries(this.commandArgs)) {
+                    if (argValue && argValue.trim()) {
+                        cmdString += ' ' + argValue.trim();
+                    }
+                }
+            }
+            
+            console.log('Executing command:', cmdString);
+            
+            // Send command via WebSocket
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.commandResult = 'Sending command...';
+                this.ws.send(cmdString + '\n');
+                
+                // Clear args for next command
+                this.commandArgs = {};
+                this.showStatus('Command sent: ' + cmdString, 'success');
+            } else {
+                this.showStatus('WebSocket not connected', 'error');
             }
         },
         
