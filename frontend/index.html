@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,7 +11,7 @@
 
     <script src="js/app.js"></script>
 
-    
+
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -19,47 +20,46 @@
             padding: 0;
             overflow: hidden;
         }
+
         #terminal {
             width: 100%;
             height: 100%;
         }
     </style>
 </head>
+
 <body class="bg-gray-900">
-    <div x-data="terminalApp()" 
-         x-init="init(); $nextTick(() => initTerminal())" 
-         class="h-screen flex flex-col">
+    <div x-data="terminalApp()" x-init="init(); $nextTick(() => initTerminal())" class="h-screen flex flex-col">
         <div class="bg-gray-800 text-white p-3 flex items-center justify-between border-b border-gray-700">
             <div class="flex items-center space-x-4">
                 <h1 class="text-xl font-bold">Zephyr Device Manager</h1>
                 <div class="flex items-center space-x-2">
-                    <div class="w-3 h-3 rounded-full" 
-                         :class="connected ? 'bg-green-500' : 'bg-red-500'"></div>
+                    <div class="w-3 h-3 rounded-full" :class="connected ? 'bg-green-500' : 'bg-red-500'"></div>
                     <span class="text-sm" x-text="connected ? 'Connected' : 'Disconnected'"></span>
-                    <span x-show="connected && currentPort" 
-                          class="text-sm text-gray-400" 
-                          x-text="'(' + currentPort + ')'"></span>
+                    <span x-show="connected && currentPort" class="text-sm text-gray-400"
+                        x-text="'(' + currentPort + ')'"></span>
                 </div>
             </div>
             <div class="flex items-center space-x-2">
-                <button @click="toggleCommands()" 
-                        class="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-500 disabled:cursor-not-allowed rounded text-sm text-white font-medium"
-                        :disabled="!connected || loadingCommands">
-                    <span x-text="loadingCommands ? 'Scanning...' : (commands.length > 0 ? 'Commands' : 'Scan Commands')"></span>
+                <button @click="toggleCommands()"
+                    class="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-500 disabled:cursor-not-allowed rounded text-sm text-white font-medium"
+                    :disabled="!connected || loadingCommands">
+                    <span
+                        x-text="loadingCommands ? 'Scanning...' : (commands.length > 0 ? 'Commands' : 'Scan Commands')"></span>
                 </button>
-                <button @click="showSettings = true" 
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white font-medium">
+                <button @click="showSettings = true"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white font-medium">
                     Settings
                 </button>
-                <button @click="toggleConnection()" 
-                        class="px-4 py-2 rounded text-sm text-white font-medium"
-                        :class="connected ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'"
-                        x-text="connected ? 'Disconnect' : 'Connect'">
+                <button @click="toggleConnection()" class="px-4 py-2 rounded text-sm text-white font-medium"
+                    :class="connected ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'"
+                    x-text="connected ? 'Disconnect' : 'Connect'">
                 </button>
             </div>
         </div>
 
-        <div class="flex-1 min-h-0">            <div id="terminal" class="w-full h-full"></div>
+        <div class="flex-1 min-h-0">
+            <div id="terminal" class="w-full h-full"></div>
         </div>
 
         <!-- Commands Sidebar -->
@@ -68,39 +68,37 @@
             <div class="absolute inset-0 bg-black bg-opacity-50" @click="showCommands = false"></div>
 
             <!-- Slide-in Sidebar from Right -->
-            <aside class="absolute right-0 top-0 h-full w-full sm:w-96 max-w-md bg-white shadow-xl overflow-auto flex flex-col"
-                   @click.stop
-                   x-show="showCommands"
-                   x-transition:enter="transform transition ease-out duration-300"
-                   x-transition:enter-start="translate-x-full"
-                   x-transition:enter-end="translate-x-0"
-                   x-transition:leave="transform transition ease-in duration-200"
-                   x-transition:leave-start="translate-x-0"
-                   x-transition:leave-end="translate-x-full">
-                
+            <aside
+                class="absolute right-0 top-0 h-full w-full sm:w-96 max-w-md bg-white shadow-xl overflow-auto flex flex-col"
+                @click.stop x-show="showCommands" x-transition:enter="transform transition ease-out duration-300"
+                x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+                x-transition:leave="transform transition ease-in duration-200" x-transition:leave-start="translate-x-0"
+                x-transition:leave-end="translate-x-full">
+
                 <!-- Header -->
                 <div class="flex items-center justify-between p-4 border-b border-gray-200">
                     <h2 class="text-2xl font-bold">Commands</h2>
                     <div class="flex items-center space-x-2">
-                        <button @click="exportCommands()" 
-                                class="text-gray-600 hover:text-gray-900"
-                                title="Export commands">
+                        <button @click="exportCommands()" class="text-gray-600 hover:text-gray-900"
+                            title="Export commands">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                             </svg>
                         </button>
-                        <button @click="document.getElementById('importFile').click()" 
-                                class="text-gray-600 hover:text-gray-900"
-                                title="Import commands">
+                        <button @click="document.getElementById('importFile').click()"
+                            class="text-gray-600 hover:text-gray-900" title="Import commands">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                             </svg>
                         </button>
-                        <input type="file" id="importFile" class="hidden" accept=".json" @change="importCommands($event.target.files[0])">
-                        <button @click="showCommands = false" 
-                                class="text-gray-400 hover:text-gray-600">
+                        <input type="file" id="importFile" class="hidden" accept=".json"
+                            @change="importCommands($event.target.files[0])">
+                        <button @click="showCommands = false" class="text-gray-400 hover:text-gray-600">
                             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12"></path>
                             </svg>
                         </button>
                     </div>
@@ -112,7 +110,7 @@
                     <div x-show="loadingCommands" class="flex items-center justify-center py-8">
                         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
                     </div>
-                    
+
                     <!-- Empty State -->
                     <div x-show="!loadingCommands && commands.length === 0" class="text-center py-8 text-gray-500">
                         <p>No commands scanned.</p>
@@ -123,7 +121,7 @@
                     <div x-show="!loadingCommands && commands.length > 0 && !selectedCommand" class="space-y-2">
                         <template x-for="cmd in commands" :key="cmd.id">
                             <button @click="selectedCommand = cmd"
-                                    class="w-full text-left p-3 rounded border border-gray-200 hover:bg-gray-100 transition">
+                                class="w-full text-left p-3 rounded border border-gray-200 hover:bg-gray-100 transition">
                                 <div class="font-semibold text-gray-900" x-text="cmd.name"></div>
                                 <div class="text-sm text-gray-600" x-text="cmd.description"></div>
                             </button>
@@ -132,10 +130,11 @@
 
                     <!-- Command Executor Panel -->
                     <div x-show="selectedCommand" class="space-y-4">
-                        <button @click="selectedCommand = null" class="text-blue-600 hover:text-blue-800 text-sm flex items-center">
+                        <button @click="selectedCommand = null"
+                            class="text-blue-600 hover:text-blue-800 text-sm flex items-center">
                             <span>← Back to Commands</span>
                         </button>
-                        
+
                         <div class="bg-gray-100 p-3 rounded">
                             <h3 class="font-bold text-lg text-gray-900" x-text="selectedCommand?.name"></h3>
                             <p class="text-sm text-gray-600 mt-1" x-text="selectedCommand?.description"></p>
@@ -143,7 +142,8 @@
 
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Usage</label>
-                            <p class="text-sm text-gray-600 font-mono" x-text="selectedCommand?.usage || 'No usage info'"></p>
+                            <p class="text-sm text-gray-600 font-mono"
+                                x-text="selectedCommand?.usage || 'No usage info'"></p>
                         </div>
 
                         <div class="space-y-3">
@@ -155,27 +155,27 @@
                                             <span x-text="arg.name"></span>
                                             <span x-show="!arg.required" class="text-gray-400 text-xs">(optional)</span>
                                         </label>
-                                        <input type="text" 
-                                               placeholder="Enter value..."
-                                               class="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                                               @change="if (!commandArgs) commandArgs = {}; commandArgs[arg.id] = $event.target.value">
+                                        <input type="text" placeholder="Enter value..."
+                                            class="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                                            @change="if (!commandArgs) commandArgs = {}; commandArgs[arg.id] = $event.target.value">
                                     </div>
                                 </template>
                             </div>
                         </div>
 
                         <div class="flex gap-2 pt-2">
-                            <button @click="executeCommand(selectedCommand)" 
-                                    class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded">
+                            <button @click="executeCommand(selectedCommand)"
+                                class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded">
                                 Execute
                             </button>
-                            <button @click="selectedCommand = null" 
-                                    class="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-900 font-medium rounded">
+                            <button @click="selectedCommand = null"
+                                class="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-900 font-medium rounded">
                                 Cancel
                             </button>
                         </div>
 
-                        <div x-show="commandResult" class="mt-3 p-3 bg-gray-900 text-gray-100 rounded text-sm font-mono max-h-32 overflow-y-auto">
+                        <div x-show="commandResult"
+                            class="mt-3 p-3 bg-gray-900 text-gray-100 rounded text-sm font-mono max-h-32 overflow-y-auto">
                             <p class="text-xs text-gray-400 mb-1">Result:</p>
                             <p x-text="commandResult"></p>
                         </div>
@@ -184,9 +184,9 @@
 
                 <!-- Rescan Button -->
                 <div class="border-t border-gray-200 p-4">
-                    <button @click="scanCommands()" 
-                            class="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded"
-                            :disabled="!connected || loadingCommands">
+                    <button @click="scanCommands(true)"
+                        class="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded"
+                        :disabled="!connected || loadingCommands">
                         <span x-text="loadingCommands ? '⟳ Rescanning...' : '⟳ Rescan Commands'"></span>
                     </button>
                 </div>
@@ -204,20 +204,16 @@
 
             <!-- Slide-in Sidebar -->
             <aside class="absolute right-0 top-0 h-full w-full sm:w-96 max-w-md bg-white shadow-xl overflow-auto"
-                   @click.stop
-                   x-show="showSettings"
-                   x-transition:enter="transform transition ease-out duration-300"
-                   x-transition:enter-start="translate-x-full"
-                   x-transition:enter-end="translate-x-0"
-                   x-transition:leave="transform transition ease-in duration-200"
-                   x-transition:leave-start="translate-x-0"
-                   x-transition:leave-end="translate-x-full">
+                @click.stop x-show="showSettings" x-transition:enter="transform transition ease-out duration-300"
+                x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
+                x-transition:leave="transform transition ease-in duration-200" x-transition:leave-start="translate-x-0"
+                x-transition:leave-end="translate-x-full">
                 <div class="flex items-center justify-between mb-4 px-4 pt-4">
                     <h2 class="text-2xl font-bold">Serial Port Settings</h2>
-                    <button @click="showSettings = false" 
-                            class="text-gray-400 hover:text-gray-600">
+                    <button @click="showSettings = false" class="text-gray-400 hover:text-gray-600">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
                         </svg>
                     </button>
                 </div>
@@ -228,17 +224,17 @@
                             Serial Port
                         </label>
                         <div class="flex space-x-2">
-                            <select x-model="selectedPort" 
-                                    class="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    :disabled="loadingPorts">
+                            <select x-model="selectedPort"
+                                class="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                :disabled="loadingPorts">
                                 <option value="">Select a port...</option>
                                 <template x-for="port in availablePorts" :key="port.device">
-                                    <option :value="port.device" x-text="port.device + ' - ' + (port.description || 'Unknown')"></option>
+                                    <option :value="port.device"
+                                        x-text="port.device + ' - ' + (port.description || 'Unknown')"></option>
                                 </template>
                             </select>
-                            <button @click="loadPorts()" 
-                                    class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
-                                    :disabled="loadingPorts">
+                            <button @click="loadPorts()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded text-sm"
+                                :disabled="loadingPorts">
                                 <span x-text="loadingPorts ? 'Loading...' : 'Refresh'"></span>
                             </button>
                         </div>
@@ -246,11 +242,9 @@
                             <label class="block text-xs text-gray-500 mb-1">
                                 Or enter port manually:
                             </label>
-                            <input type="text" 
-                                   x-model="manualPort"
-                                   @input="if(manualPort) selectedPort = manualPort"
-                                   placeholder="/dev/pts/12"
-                                   class="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <input type="text" x-model="manualPort" @input="if(manualPort) selectedPort = manualPort"
+                                placeholder="/dev/pts/12"
+                                class="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
                     </div>
 
@@ -258,8 +252,8 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">
                             Baud Rate
                         </label>
-                        <select x-model="baudRate" 
-                                class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <select x-model="baudRate"
+                            class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="9600">9600</option>
                             <option value="19200">19200</option>
                             <option value="38400">38400</option>
@@ -271,20 +265,18 @@
                         </select>
                     </div>
 
-                    <div x-show="statusMessage" 
-                         class="p-3 rounded"
-                         :class="statusMessageType === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'"
-                         x-text="statusMessage">
+                    <div x-show="statusMessage" class="p-3 rounded"
+                        :class="statusMessageType === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'"
+                        x-text="statusMessage">
                     </div>
 
                     <div class="flex space-x-2 pt-4">
-                        <button @click="saveSettings()" 
-                                class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
-                                :disabled="!selectedPort || connecting">
+                        <button @click="saveSettings()"
+                            class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+                            :disabled="!selectedPort || connecting">
                             <span x-text="connecting ? 'Connecting...' : 'Connect'"></span>
                         </button>
-                        <button @click="showSettings = false" 
-                                class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded">
+                        <button @click="showSettings = false" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded">
                             Cancel
                         </button>
                     </div>
@@ -293,4 +285,5 @@
         </div>
     </div>
 </body>
+
 </html>

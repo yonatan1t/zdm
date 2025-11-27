@@ -13,7 +13,7 @@ function terminalApp() {
         statusMessageType: 'info',
         connecting: false,
         currentPort: '',
-        
+
         // Command Discovery State
         showCommands: false,
         commands: [],
@@ -25,22 +25,22 @@ function terminalApp() {
         selectedCommand: null,
         commandArgs: {},
         commandResult: '',
-        
+
         // WebSocket and Terminal
         ws: null,
         terminal: null,
-        
+
         // Initialize application (Now handles status checks/port loading)
         async init() {
             console.log("init() called");
-            
+
             // Load available ports
             await this.loadPorts();
-            
+
             // Check connection status
             await this.checkStatus();
         },
-        
+
         // Initialize xterm.js terminalS
         initTerminal(fit) {
             console.log("initTerminal() called");
@@ -64,7 +64,7 @@ function terminalApp() {
             term.open(el);
 
             fitAddon.fit();
-            
+
             window.addEventListener('resize', () => {
                 fitAddon.fit();
             });
@@ -72,7 +72,7 @@ function terminalApp() {
             term.writeln("✅ Terminal initialized successfully and fitted");
 
             this.terminal = term;   // <-- critical line
-            
+
             // 💡 NEW CODE BLOCK START: Enable User Input (Tx)
             // Add event listener to send input data to the WebSocket
             term.onData(data => {
@@ -85,7 +85,7 @@ function terminalApp() {
             });
             // 💡 NEW CODE BLOCK END
         },
-        
+
         // Load available serial ports
         async loadPorts() {
             this.loadingPorts = true;
@@ -93,7 +93,7 @@ function terminalApp() {
                 const response = await fetch('/api/ports');
                 const data = await response.json();
                 this.availablePorts = data.ports || [];
-                
+
                 // If no port selected and ports available, select first one
                 if (!this.selectedPort && this.availablePorts.length > 0) {
                     this.selectedPort = this.availablePorts[0].device;
@@ -105,7 +105,7 @@ function terminalApp() {
                 this.loadingPorts = false;
             }
         },
-        
+
         // Check connection status
         async checkStatus() {
             try {
@@ -113,7 +113,7 @@ function terminalApp() {
                 const data = await response.json();
                 this.connected = data.connected || false;
                 this.currentPort = data.port || '';
-                
+
                 if (this.connected) {
                     this.connectWebSocket();
                 }
@@ -121,7 +121,7 @@ function terminalApp() {
                 console.error('Error checking status:', error);
             }
         },
-        
+
         // Toggle connection
         async toggleConnection() {
             if (this.connected) {
@@ -130,7 +130,7 @@ function terminalApp() {
                 this.showSettings = true;
             }
         },
-        
+
         // Save settings and connect
         async saveSettings() {
             // Use manualPort if it has a value, otherwise use selectedPort from dropdown
@@ -140,16 +140,16 @@ function terminalApp() {
                 this.showStatus('Please select or enter a serial port', 'error');
                 return;
             }
-            
+
             this.connecting = true;
             this.statusMessage = '';
-            
+
             try {
                 // Disconnect if already connected
                 if (this.connected) {
                     await this.disconnect();
                 }
-                
+
                 // Connect to serial port
                 const response = await fetch('/api/connect', {
                     method: 'POST',
@@ -161,15 +161,15 @@ function terminalApp() {
                         baudrate: parseInt(this.baudRate)
                     })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.status === 'connected') {
                     this.connected = true;
                     this.currentPort = portToConnect;
                     this.showSettings = false;
                     this.showStatus('Connected to ' + portToConnect, 'success');
-                    
+
                     // Connect WebSocket
                     this.connectWebSocket();
                 } else {
@@ -182,20 +182,20 @@ function terminalApp() {
                 this.connecting = false;
             }
         },
-        
+
         // Connect WebSocket
         connectWebSocket() {
             // Close existing connection
             if (this.ws) {
                 this.ws.close();
             }
-            
+
             // Determine WebSocket URL
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws`;
-            
+
             this.ws = new WebSocket(wsUrl);
-            
+
             this.ws.onopen = () => {
                 console.log('WebSocket connected');
                 if (this.terminal) {
@@ -210,23 +210,23 @@ function terminalApp() {
                     console.error('Terminal not initialized when WebSocket opened!');
                 }
             };
-            
+
             // Track message count for debugging
             let messageCount = 0;
-            
+
             this.ws.onmessage = (event) => {
                 messageCount++;
                 // Log first 10 messages, then every 100th message
                 if (messageCount <= 10 || messageCount % 100 === 0) {
-                    console.log(`[${messageCount}] WebSocket message: ${event.data.length} chars`, 
-                                event.data.length > 0 ? `"${event.data.substring(0, Math.min(50, event.data.length))}"` : '(empty)');
+                    console.log(`[${messageCount}] WebSocket message: ${event.data.length} chars`,
+                        event.data.length > 0 ? `"${event.data.substring(0, Math.min(50, event.data.length))}"` : '(empty)');
                 }
-                
+
                 // Collect data during command discovery
                 if (this.commandDiscoveryInProgress) {
                     this.discoveryCollectedData += event.data;
                 }
-                
+
                 // Check if message is JSON (error message)
                 // Only check if it starts with '{' and is short (JSON errors are short)
                 if (event.data.length < 100 && event.data.trim().startsWith('{')) {
@@ -243,18 +243,18 @@ function terminalApp() {
                         // Not valid JSON, continue as text
                     }
                 }
-                
+
                 // Treat as text data from serial port
                 if (!this.terminal) {
                     console.error('Terminal not initialized!');
                     return;
                 }
-                
+
                 try {
                     // Write data directly to terminal
                     // xterm.js handles this efficiently
                     this.terminal.write(event.data);
-                    
+
                     // Log first few successful writes
                     if (messageCount <= 5) {
                         console.log(`[${messageCount}] Written to terminal successfully`);
@@ -263,14 +263,14 @@ function terminalApp() {
                     console.error('Error writing to terminal:', e, 'Data:', event.data);
                 }
             };
-            
+
             this.ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
                 if (this.terminal) {
                     this.terminal.write('\r\n[WebSocket error]\r\n');
                 }
             };
-            
+
             this.ws.onclose = () => {
                 console.log('WebSocket disconnected');
                 if (this.terminal && this.connected) {
@@ -278,7 +278,7 @@ function terminalApp() {
                 }
             };
         },
-        
+
         // Disconnect
         async disconnect() {
             try {
@@ -287,16 +287,16 @@ function terminalApp() {
                     this.ws.close();
                     this.ws = null;
                 }
-                
+
                 // Disconnect serial port
                 const response = await fetch('/api/disconnect', {
                     method: 'POST'
                 });
-                
+
                 const data = await response.json();
                 this.connected = false;
                 this.currentPort = '';
-                
+
                 if (this.terminal) {
                     this.terminal.write('\r\n\r\n[Disconnected]\r\n');
                 }
@@ -304,20 +304,20 @@ function terminalApp() {
                 console.error('Error disconnecting:', error);
             }
         },
-        
+
         // Show status message
         showStatus(message, type = 'info') {
             this.statusMessage = message;
             this.statusMessageType = type;
-            
+
             // Clear message after 5 seconds
             setTimeout(() => {
                 this.statusMessage = '';
             }, 5000);
         },
-        
+
         // ============ COMMAND DISCOVERY SYSTEM ============
-        
+
         // Load cached commands from localStorage
         loadCachedCommands() {
             const cached = localStorage.getItem('zephyr_commands_cache');
@@ -329,7 +329,7 @@ function terminalApp() {
             }
             return false;
         },
-        
+
         // Save commands to localStorage
         saveCachedCommands(commands) {
             const cache = {
@@ -342,38 +342,38 @@ function terminalApp() {
             this.commands = commands;
             this.lastScannedTime = cache.lastScanned;
         },
-        
+
         // Scan and discover commands
-        async scanCommands() {
+        async scanCommands(force = false) {
             if (!this.connected) {
                 this.showStatus('Must be connected to scan commands', 'error');
                 return;
             }
-            
+
             this.loadingCommands = true;
             this.showStatus('Scanning commands...', 'info');
-            
+
             try {
-                // Try to load cache first (for fast startup)
-                if (this.loadCachedCommands()) {
+                // Try to load cache first (for fast startup), unless forced
+                if (!force && this.loadCachedCommands()) {
                     this.showStatus('Loaded cached commands from ' + new Date(this.lastScannedTime).toLocaleString(), 'success');
                     this.showCommands = true;
                     this.loadingCommands = false;
                     return;
                 }
-                
+
                 // Initiate discovery
                 this.commandDiscoveryInProgress = true;
                 this.discoveryCollectedData = '';
-                
+
                 console.log('Starting command discovery...');
-                
+
                 // Send 'help' command to get list of commands
                 this.sendDiscoveryCommand('help\n');
-                
+
                 // Wait for discovery to complete (with timeout)
-                await this.waitForDiscoveryCompletion(30000);
-                
+                await this.waitForDiscoveryCompletion(300);
+
                 this.showStatus('Commands scanned successfully!', 'success');
                 this.showCommands = true;
             } catch (error) {
@@ -385,7 +385,7 @@ function terminalApp() {
                 this.commandDiscoveryInProgress = false;
             }
         },
-        
+
         // Toggle commands view or scan
         toggleCommands() {
             if (this.commands.length > 0) {
@@ -394,14 +394,14 @@ function terminalApp() {
                 this.scanCommands();
             }
         },
-        
+
         // Execute a command with args
         executeCommand(command) {
             if (!command) {
                 this.showStatus('No command selected', 'error');
                 return;
             }
-            
+
             // Build command string with args
             let cmdString = command.name;
             if (this.commandArgs && Object.keys(this.commandArgs).length > 0) {
@@ -411,14 +411,14 @@ function terminalApp() {
                     }
                 }
             }
-            
+
             console.log('Executing command:', cmdString);
-            
+
             // Send command via WebSocket
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                 this.commandResult = 'Sending command...';
                 this.ws.send(cmdString + '\n');
-                
+
                 // Clear args for next command
                 this.commandArgs = {};
                 this.showStatus('Command sent: ' + cmdString, 'success');
@@ -426,14 +426,14 @@ function terminalApp() {
                 this.showStatus('WebSocket not connected', 'error');
             }
         },
-        
+
         // Send command during discovery
         sendDiscoveryCommand(command) {
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(command);
             }
         },
-        
+
         // Wait for discovery to complete
         waitForDiscoveryCompletion(timeout) {
             return new Promise((resolve, reject) => {
@@ -441,19 +441,19 @@ function terminalApp() {
                 let lastDataLength = 0;
                 let noDataChangedCount = 0;
                 let resolved = false;
-                
+
                 const checkCompletion = () => {
                     if (resolved) return; // Prevent multiple resolutions
-                    
+
                     console.log(`Discovery check: data length = ${this.discoveryCollectedData.length}, timeout in ${timeout - (Date.now() - startTime)}ms`);
-                    
+
                     // Check if we have help output with commands
                     if (this.discoveryCollectedData.includes('Available commands:')) {
                         // Parse the help output
                         const parsed = this.parseHelpOutput(this.discoveryCollectedData);
-                        
+
                         console.log(`Found ${parsed.length} commands`);
-                        
+
                         if (parsed.length > 0) {
                             // Successfully got command list
                             resolved = true;
@@ -465,7 +465,7 @@ function terminalApp() {
                             return;
                         }
                     }
-                    
+
                     // Check if data has stopped changing (no new data for 2 seconds)
                     if (this.discoveryCollectedData.length === lastDataLength) {
                         noDataChangedCount++;
@@ -491,7 +491,7 @@ function terminalApp() {
                         noDataChangedCount = 0;
                         lastDataLength = this.discoveryCollectedData.length;
                     }
-                    
+
                     // Check timeout
                     if (Date.now() - startTime > timeout) {
                         resolved = true;
@@ -499,30 +499,30 @@ function terminalApp() {
                         reject(new Error('Command discovery timeout - no valid help output received'));
                         return;
                     }
-                    
+
                     // Try again in 500ms
                     setTimeout(checkCompletion, 500);
                 };
-                
+
                 checkCompletion();
             });
         },
-        
+
         // Parse 'help' command output to extract command list
         parseHelpOutput(helpText) {
             // Remove ANSI escape codes (like [1;32m, [24C, etc)
             const cleanText = helpText.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[[0-9]*C/g, '');
-            
+
             const lines = cleanText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
             const commands = [];
             let inCommandSection = false;
 
             console.log('=== PARSING HELP OUTPUT ===');
             console.log('Total non-empty lines:', lines.length);
-            
+
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
-                
+
                 if (line.includes('Available commands:')) {
                     inCommandSection = true;
                     console.log(`✓ Found section marker at line ${i}`);
@@ -537,30 +537,30 @@ function terminalApp() {
                     // Match command line: "command_name            : Description here"
                     // After trimming, the format is: "command_name ... : description"
                     const cmdMatch = line.match(/^(\w[\w_]*)\s+:\s*(.*)$/);
-                    
+
                     if (cmdMatch) {
                         const cmdName = cmdMatch[1];
                         let cmdDesc = cmdMatch[2].trim();
-                        
+
                         // Look ahead for continuation lines
                         for (let j = i + 1; j < lines.length; j++) {
                             const nextLine = lines[j];
-                            
+
                             // Stop if we hit another command (word followed by colon)
                             if (nextLine.match(/^(\w[\w_]*)\s+:/)) {
                                 break;
                             }
-                            
+
                             // If it's clearly not a continuation, stop
                             if (nextLine.includes(':')) {
                                 break;
                             }
-                            
+
                             // Add continuation
                             cmdDesc += ' ' + nextLine;
                             i = j; // Skip these lines
                         }
-                        
+
                         commands.push({
                             id: cmdName,
                             name: cmdName,
@@ -569,7 +569,7 @@ function terminalApp() {
                             helpText: '',
                             args: []
                         });
-                        
+
                         console.log(`  ✓ [${cmdName}] "${cmdDesc.substring(0, 50)}..."`);
                     } else if (line.match(/^(\w[\w_]*)\s+:/)) {
                         // This is a command but regex didn't match - debug it
@@ -584,7 +584,7 @@ function terminalApp() {
             }
             return commands;
         },
-        
+
         // Export commands to JSON file
         exportCommands() {
             const dataStr = JSON.stringify(this.commandsCache || { commands: this.commands, lastScanned: new Date().toISOString() }, null, 2);
@@ -596,7 +596,7 @@ function terminalApp() {
             link.click();
             URL.revokeObjectURL(url);
         },
-        
+
         // Import commands from JSON file
         importCommands(file) {
             const reader = new FileReader();
@@ -615,7 +615,7 @@ function terminalApp() {
             };
             reader.readAsText(file);
         },
-        
+
         // Clear cached commands
         clearCommandsCache() {
             localStorage.removeItem('zephyr_commands_cache');
