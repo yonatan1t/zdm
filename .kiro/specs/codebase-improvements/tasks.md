@@ -3,6 +3,10 @@
 ## Phase 1: Foundation
 
 - [ ] 1. Set up configuration management system
+
+
+
+
   - Create `backend/app/config.py` with Pydantic Settings
   - Define all configuration parameters with types and defaults
   - Add support for environment variables with `ZDM_` prefix
