@@ -4,7 +4,9 @@ This module provides centralized configuration using Pydantic Settings.
 All configuration can be overridden via environment variables with ZDM_ prefix.
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator, ValidationError
 from typing import Optional
+import logging
 
 
 class Settings(BaseSettings):
@@ -65,6 +67,62 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore"
     )
+    
+    @field_validator('port')
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        """Validate port number is in valid range."""
+        if not 1 <= v <= 65535:
+            raise ValueError(f"Port must be between 1 and 65535, got {v}")
+        return v
+    
+    @field_validator('default_baudrate')
+    @classmethod
+    def validate_baudrate(cls, v: int) -> int:
+        """Validate baud rate is in acceptable range."""
+        valid_baudrates = [300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
+        if v not in valid_baudrates:
+            raise ValueError(f"Baud rate must be one of {valid_baudrates}, got {v}")
+        return v
+    
+    @field_validator('log_level')
+    @classmethod
+    def validate_log_level(cls, v: str) -> str:
+        """Validate log level is valid."""
+        valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+        v_upper = v.upper()
+        if v_upper not in valid_levels:
+            raise ValueError(f"Log level must be one of {valid_levels}, got {v}")
+        return v_upper
+    
+    @field_validator('log_format')
+    @classmethod
+    def validate_log_format(cls, v: str) -> str:
+        """Validate log format is valid."""
+        valid_formats = ['json', 'standard']
+        v_lower = v.lower()
+        if v_lower not in valid_formats:
+            raise ValueError(f"Log format must be one of {valid_formats}, got {v}")
+        return v_lower
+    
+    @field_validator('serial_timeout', 'reconnect_delay')
+    @classmethod
+    def validate_positive_float(cls, v: float) -> float:
+        """Validate float values are positive."""
+        if v <= 0:
+            raise ValueError(f"Value must be positive, got {v}")
+        return v
+    
+    @field_validator('max_reconnect_attempts', 'ws_max_reconnect_attempts', 
+                     'ws_heartbeat_interval', 'ws_message_queue_size',
+                     'log_max_bytes', 'log_backup_count', 'buffer_size',
+                     'max_buffer_size', 'terminal_max_lines')
+    @classmethod
+    def validate_positive_int(cls, v: int) -> int:
+        """Validate integer values are positive."""
+        if v <= 0:
+            raise ValueError(f"Value must be positive, got {v}")
+        return v
 
 
 # Global settings instance
@@ -76,10 +134,19 @@ def get_settings() -> Settings:
     
     Returns:
         Settings: The application settings instance.
+        
+    Raises:
+        ValidationError: If configuration validation fails.
     """
     global _settings
     if _settings is None:
-        _settings = Settings()
+        try:
+            _settings = Settings()
+            # Log successful configuration load (will be properly logged once logging is set up)
+            print(f"Configuration loaded successfully (log_level={_settings.log_level})")
+        except ValidationError as e:
+            print(f"Configuration validation failed: {e}")
+            raise
     return _settings
 
 
