@@ -21,10 +21,12 @@ function terminalApp() {
         commandsCache: null,
         lastScannedTime: null,
         commandDiscoveryInProgress: false,
+        discoveryLock: false, // Concurrency control lock
         discoveryCollectedData: '',
         selectedCommand: null,
         commandArgs: {},
         commandResult: '',
+        expandedCommands: {}, // Track which commands are expanded to show subcommands
 
         // WebSocket and Terminal
         ws: null,
@@ -322,10 +324,31 @@ function terminalApp() {
         loadCachedCommands() {
             const cached = localStorage.getItem('zephyr_commands_cache');
             if (cached) {
-                this.commandsCache = JSON.parse(cached);
-                this.commands = this.commandsCache.commands || [];
-                this.lastScannedTime = this.commandsCache.lastScanned;
-                return true;
+                try {
+                    this.commandsCache = JSON.parse(cached);
+                    
+                    // Validate cache version and structure
+                    if (!this.commandsCache.version || !this.commandsCache.commands) {
+                        console.warn('Invalid cache structure, ignoring cache');
+                        return false;
+                    }
+                    
+                    this.commands = this.commandsCache.commands || [];
+                    this.lastScannedTime = this.commandsCache.lastScanned;
+                    
+                    console.log(`Loaded ${this.commands.length} commands from cache`);
+                    
+                    // Count commands with subcommands
+                    const withSubcommands = this.commands.filter(c => c.subcommands && c.subcommands.length > 0).length;
+                    if (withSubcommands > 0) {
+                        console.log(`  ${withSubcommands} commands have subcommands`);
+                    }
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Error loading cached commands:', error);
+                    return false;
+                }
             }
             return false;
         },
@@ -335,12 +358,14 @@ function terminalApp() {
             const cache = {
                 commands: commands,
                 lastScanned: new Date().toISOString(),
-                version: '1.0'
+                version: '2.0' // Updated version to support hierarchical structure
             };
             localStorage.setItem('zephyr_commands_cache', JSON.stringify(cache));
             this.commandsCache = cache;
             this.commands = commands;
             this.lastScannedTime = cache.lastScanned;
+            
+            console.log(`Saved ${commands.length} commands to cache`);
         },
 
         // Scan and discover commands
@@ -350,6 +375,13 @@ function terminalApp() {
                 return;
             }
 
+            // Concurrency control: prevent concurrent scans
+            if (this.discoveryLock) {
+                this.showStatus('Command discovery already in progress. Please wait...', 'error');
+                return;
+            }
+
+            this.discoveryLock = true;
             this.loadingCommands = true;
             this.showStatus('Scanning commands...', 'info');
 
@@ -359,6 +391,7 @@ function terminalApp() {
                     this.showStatus('Loaded cached commands from ' + new Date(this.lastScannedTime).toLocaleString(), 'success');
                     this.showCommands = true;
                     this.loadingCommands = false;
+                    this.discoveryLock = false;
                     return;
                 }
 
@@ -383,6 +416,7 @@ function terminalApp() {
             } finally {
                 this.loadingCommands = false;
                 this.commandDiscoveryInProgress = false;
+                this.discoveryLock = false;
             }
         },
 
@@ -403,7 +437,9 @@ function terminalApp() {
             }
 
             // Build command string with args
-            let cmdString = command.name;
+            // Use fullName for subcommands (e.g., "log backend"), otherwise use name
+            let cmdString = command.fullName || command.name;
+            
             if (this.commandArgs && Object.keys(this.commandArgs).length > 0) {
                 for (const [argId, argValue] of Object.entries(this.commandArgs)) {
                     if (argValue && argValue.trim()) {
@@ -508,6 +544,293 @@ function terminalApp() {
             });
         },
 
+        // Wait for subcommand discovery to complete
+        waitForSubcommandDiscovery(timeout) {
+            return new Promise((resolve, reject) => {
+                const startTime = Date.now();
+                let lastDataLength = 0;
+                let noDataChangedCount = 0;
+                let resolved = false;
+
+                const checkCompletion = () => {
+                    if (resolved) return;
+
+                    const elapsed = Date.now() - startTime;
+                    console.log(`Subcommand discovery check: data length = ${this.discoveryCollectedData.length}, elapsed = ${elapsed}ms`);
+
+                    // Check if data has stopped changing (no new data for 1 second)
+                    if (this.discoveryCollectedData.length === lastDataLength) {
+                        noDataChangedCount++;
+                        if (noDataChangedCount >= 2) { // 1 second with no change (2 * 500ms)
+                            console.log('Data stable, completing discovery');
+                            resolved = true;
+                            
+                            // Log the collected data for debugging
+                            console.log('Collected help output:', this.discoveryCollectedData.substring(0, 200));
+                            
+                            resolve();
+                            return;
+                        }
+                    } else {
+                        noDataChangedCount = 0;
+                        lastDataLength = this.discoveryCollectedData.length;
+                    }
+
+                    // Check timeout
+                    if (elapsed > timeout) {
+                        resolved = true;
+                        console.log('Timeout reached, completing with collected data');
+                        resolve(); // Resolve anyway with whatever data we have
+                        return;
+                    }
+
+                    // Try again in 500ms
+                    setTimeout(checkCompletion, 500);
+                };
+
+                checkCompletion();
+            });
+        },
+
+        // Discover subcommands for a specific command
+        async discoverSubcommands(command) {
+            if (!this.connected) {
+                this.showStatus('Must be connected to discover subcommands', 'error');
+                return;
+            }
+
+            // Concurrency control: prevent concurrent discovery
+            if (this.discoveryLock) {
+                this.showStatus('Discovery already in progress. Please wait...', 'error');
+                return;
+            }
+
+            this.discoveryLock = true;
+            this.commandDiscoveryInProgress = true;
+            this.discoveryCollectedData = '';
+
+            try {
+                console.log(`Discovering subcommands for: ${command.name}`);
+
+                // Send '<command> --help' to get subcommands (Zephyr shell syntax)
+                this.sendDiscoveryCommand(`${command.name} --help\n`);
+
+                // Wait for discovery to complete (with shorter timeout for subcommands)
+                await this.waitForSubcommandDiscovery(2000); // 2 seconds
+
+                console.log(`Discovery complete. Collected ${this.discoveryCollectedData.length} chars`);
+
+                // Parse subcommands from help output
+                const subcommands = this.parseSubcommands(this.discoveryCollectedData, command.name);
+
+                if (subcommands.length > 0) {
+                    // Update command with subcommands
+                    command.subcommands = subcommands;
+                    command.hasSubcommands = true;
+
+                    // Update in commands array
+                    const cmdIndex = this.commands.findIndex(c => c.id === command.id);
+                    if (cmdIndex !== -1) {
+                        this.commands[cmdIndex] = command;
+                    }
+
+                    // Save updated cache
+                    this.saveCachedCommands(this.commands);
+
+                    this.showStatus(`Found ${subcommands.length} subcommands for ${command.name}`, 'success');
+                } else {
+                    command.hasSubcommands = false;
+                    this.showStatus(`No subcommands found for ${command.name}`, 'info');
+                }
+            } catch (error) {
+                console.error('Error discovering subcommands:', error);
+                this.showStatus('Error discovering subcommands: ' + error.message, 'error');
+            } finally {
+                this.commandDiscoveryInProgress = false;
+                this.discoveryLock = false;
+            }
+        },
+
+        // Parse arguments from help text
+        parseArguments(helpText) {
+            const args = [];
+            
+            // Look for arguments in format: <arg> or [<arg>]
+            // Matches: <address>, [<width>], <module_0>, etc.
+            const argPattern = /(<[\w_]+>|\[<[\w_]+>\])/g;
+            const matches = helpText.match(argPattern);
+            
+            if (matches) {
+                const seen = new Set();
+                matches.forEach(match => {
+                    // Remove < > and [ ]
+                    const cleanArg = match.replace(/[<>\[\]]/g, '');
+                    
+                    // Skip duplicates
+                    if (seen.has(cleanArg)) return;
+                    seen.add(cleanArg);
+                    
+                    // Determine if required or optional
+                    const required = match.startsWith('<');
+                    
+                    args.push({
+                        id: cleanArg,
+                        name: cleanArg,
+                        required: required,
+                        type: 'string',
+                        description: ''
+                    });
+                });
+            }
+            
+            return args;
+        },
+
+        // Parse subcommands from '<command> --help' output
+        parseSubcommands(helpText, parentCommand) {
+            // Remove ANSI escape codes
+            const cleanText = helpText.replace(/\x1b\[[0-9;]*m/g, '').replace(/\x1b\[[0-9]*C/g, '');
+
+            const lines = cleanText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            const subcommands = [];
+
+            console.log(`=== PARSING SUBCOMMANDS FOR ${parentCommand} ===`);
+            console.log('Raw help text:', helpText.substring(0, 200));
+            console.log('Clean text:', cleanText.substring(0, 200));
+            console.log('Number of lines:', lines.length);
+            console.log('All lines:');
+            for (let i = 0; i < lines.length; i++) {
+                console.log(`  [${i}] "${lines[i]}"`);
+            }
+
+            // Check if this is a simple help output (no subcommands)
+            // Format: "command --help" followed by "command - Description"
+            if (lines.length <= 3) {
+                // Check if it's just a simple command description
+                const hasSimpleFormat = lines.some(line => 
+                    line.includes(parentCommand) && line.includes('-') && !line.includes('--')
+                );
+                
+                if (hasSimpleFormat) {
+                    console.log('✓ Simple help format detected (no subcommands)');
+                    return subcommands; // Return empty array
+                }
+            }
+
+            // Look for subcommand section
+            let inSubcommandSection = false;
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+
+                // Look for "Subcommands:" or similar markers
+                // Also look for lines that indicate subcommand listing
+                if (line.toLowerCase().includes('subcommand') || 
+                    line.includes('Available commands:') ||
+                    line.toLowerCase().includes('options:') ||
+                    line.toLowerCase().includes('usage:')) {
+                    inSubcommandSection = true;
+                    console.log(`✓ Found subcommand section at line ${i}: "${line}"`);
+                    continue;
+                }
+
+                if (inSubcommandSection) {
+                    // Match subcommand line: "subcommand_name : Description"
+                    // Also try to match: "  subcommand_name  Description" (without colon)
+                    let cmdMatch = line.match(/^(\w[\w_-]*)\s+:\s*(.*)$/);
+                    
+                    if (!cmdMatch) {
+                        // Try alternative format: "  subcommand_name  Description"
+                        cmdMatch = line.match(/^(\w[\w_-]+)\s{2,}(.+)$/);
+                    }
+
+                    if (cmdMatch) {
+                        const subCmdName = cmdMatch[1];
+                        let subCmdDesc = cmdMatch[2].trim();
+                        let usage = '';
+
+                        // Skip if it looks like the parent command itself
+                        if (subCmdName === parentCommand) {
+                            continue;
+                        }
+
+                        // Look ahead for continuation lines and usage info
+                        for (let j = i + 1; j < lines.length; j++) {
+                            const nextLine = lines[j];
+
+                            // Stop if we hit another command
+                            if (nextLine.match(/^(\w[\w_-]*)\s+:/)) {
+                                break;
+                            }
+                            
+                            if (nextLine.match(/^(\w[\w_-]+)\s{2,}/)) {
+                                break;
+                            }
+
+                            // Stop if line contains colon (likely another section)
+                            if (nextLine.includes(':') && !nextLine.startsWith(' ')) {
+                                break;
+                            }
+
+                            // Check if it's a usage line
+                            if (nextLine.toLowerCase().includes('usage:')) {
+                                usage = nextLine;
+                                i = j;
+                                continue;
+                            }
+
+                            // Add continuation if it's indented or looks like a continuation
+                            if (nextLine.startsWith(' ') || !nextLine.match(/^[A-Z]/)) {
+                                subCmdDesc += ' ' + nextLine;
+                                i = j;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        // Parse arguments from description and usage
+                        const fullText = subCmdDesc + ' ' + usage;
+                        const args = this.parseArguments(fullText);
+
+                        subcommands.push({
+                            id: `${parentCommand}_${subCmdName}`,
+                            name: subCmdName,
+                            fullName: `${parentCommand} ${subCmdName}`,
+                            description: subCmdDesc,
+                            parent: parentCommand,
+                            usage: usage,
+                            helpText: fullText,
+                            args: args
+                        });
+
+                        console.log(`  ✓ [${subCmdName}] "${subCmdDesc.substring(0, 50)}..." (${args.length} args)`);
+                    }
+                }
+            }
+
+            console.log(`=== RESULT: ${subcommands.length} subcommands found ===`);
+            
+            if (subcommands.length === 0) {
+                console.log('No subcommands found. This command may not have subcommands.');
+            }
+            
+            return subcommands;
+        },
+
+        // Toggle command expansion to show/hide subcommands
+        toggleCommandExpansion(command) {
+            if (!this.expandedCommands[command.id]) {
+                // Expand: discover subcommands if not already discovered
+                if (!command.subcommands && command.hasSubcommands !== false) {
+                    this.discoverSubcommands(command);
+                }
+                this.expandedCommands[command.id] = true;
+            } else {
+                // Collapse
+                this.expandedCommands[command.id] = false;
+            }
+        },
+
         // Parse 'help' command output to extract command list
         parseHelpOutput(helpText) {
             // Remove ANSI escape codes (like [1;32m, [24C, etc)
@@ -561,13 +884,18 @@ function terminalApp() {
                             i = j; // Skip these lines
                         }
 
+                        // Parse arguments from description
+                        const args = this.parseArguments(cmdDesc);
+
                         commands.push({
                             id: cmdName,
                             name: cmdName,
                             description: cmdDesc,
                             usage: '',
-                            helpText: '',
-                            args: []
+                            helpText: cmdDesc,
+                            args: args,
+                            hasSubcommands: null, // null = unknown, true = has, false = none
+                            subcommands: null
                         });
 
                         console.log(`  ✓ [${cmdName}] "${cmdDesc.substring(0, 50)}..."`);

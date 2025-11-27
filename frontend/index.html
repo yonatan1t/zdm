@@ -120,11 +120,53 @@
                     <!-- Commands List -->
                     <div x-show="!loadingCommands && commands.length > 0 && !selectedCommand" class="space-y-2">
                         <template x-for="cmd in commands" :key="cmd.id">
-                            <button @click="selectedCommand = cmd"
-                                class="w-full text-left p-3 rounded border border-gray-200 hover:bg-gray-100 transition">
-                                <div class="font-semibold text-gray-900" x-text="cmd.name"></div>
-                                <div class="text-sm text-gray-600" x-text="cmd.description"></div>
-                            </button>
+                            <div class="border border-gray-200 rounded">
+                                <!-- Parent Command -->
+                                <div class="flex items-start">
+                                    <!-- Expand/Collapse Button (only if has subcommands) -->
+                                    <button 
+                                        x-show="cmd.hasSubcommands || cmd.subcommands"
+                                        @click.stop="toggleCommandExpansion(cmd)"
+                                        class="p-3 hover:bg-gray-50 transition flex-shrink-0">
+                                        <svg class="w-4 h-4 transition-transform" 
+                                             :class="expandedCommands[cmd.id] ? 'rotate-90' : ''"
+                                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                        </svg>
+                                    </button>
+                                    
+                                    <!-- Command Info -->
+                                    <button @click="selectedCommand = cmd"
+                                        class="flex-1 text-left p-3 hover:bg-gray-100 transition">
+                                        <div class="font-semibold text-gray-900 flex items-center">
+                                            <span x-text="cmd.name"></span>
+                                            <span x-show="cmd.hasSubcommands || cmd.subcommands" 
+                                                  class="ml-2 text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded">
+                                                has subcommands
+                                            </span>
+                                        </div>
+                                        <div class="text-sm text-gray-600" x-text="cmd.description"></div>
+                                        <!-- Test button to discover subcommands -->
+                                        <button @click.stop="discoverSubcommands(cmd)" 
+                                                x-show="!cmd.subcommands && cmd.hasSubcommands !== false"
+                                                class="mt-2 text-xs text-blue-600 hover:text-blue-800 underline">
+                                            Check for subcommands
+                                        </button>
+                                    </button>
+                                </div>
+                                
+                                <!-- Subcommands (shown when expanded) -->
+                                <div x-show="expandedCommands[cmd.id] && cmd.subcommands" 
+                                     class="ml-8 border-l-2 border-purple-200 bg-gray-50">
+                                    <template x-for="subcmd in cmd.subcommands" :key="subcmd.id">
+                                        <button @click="selectedCommand = subcmd"
+                                            class="w-full text-left p-3 hover:bg-gray-100 transition border-b border-gray-200 last:border-b-0">
+                                            <div class="font-medium text-gray-800 text-sm" x-text="subcmd.name"></div>
+                                            <div class="text-xs text-gray-600" x-text="subcmd.description"></div>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
                         </template>
                     </div>
 
@@ -136,8 +178,11 @@
                         </button>
 
                         <div class="bg-gray-100 p-3 rounded">
-                            <h3 class="font-bold text-lg text-gray-900" x-text="selectedCommand?.name"></h3>
+                            <h3 class="font-bold text-lg text-gray-900" x-text="selectedCommand?.fullName || selectedCommand?.name"></h3>
                             <p class="text-sm text-gray-600 mt-1" x-text="selectedCommand?.description"></p>
+                            <p x-show="selectedCommand?.parent" class="text-xs text-purple-600 mt-1">
+                                Subcommand of: <span x-text="selectedCommand?.parent"></span>
+                            </p>
                         </div>
 
                         <div>

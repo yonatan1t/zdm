@@ -3,19 +3,6 @@
 ## Phase 1: Foundation
 
 - [x] 1. Set up configuration management system
-
-
-
-
-
-
-
-
-
-
-
-
-
   - Create `backend/app/config.py` with Pydantic Settings
   - Define all configuration parameters with types and defaults
   - Add support for environment variables with `ZDM_` prefix
@@ -250,7 +237,12 @@
   - **Property 20: Failed connections reset UI state**
   - **Validates: Requirements 9.2**
 
-- [ ] 19. Add command discovery concurrency control
+- [x] 19. Add command discovery concurrency control
+
+
+
+
+
   - Implement discovery lock to prevent concurrent scans
   - Add discovery state tracking
   - Reject new discovery attempts while one is in progress
@@ -264,6 +256,19 @@
 - [ ]* 19.2 Write property test for operation isolation
   - **Property 26: Discovery prevents operation interference**
   - **Validates: Requirements 10.3**
+
+- [x] 19.3 Implement recursive shell subcommand support
+
+
+  - Enhance command discovery to detect and parse subcommands (e.g., `log backend`, `log disable`)
+  - Update command data model to support hierarchical command structure with parent-child relationships
+  - Implement recursive parsing of `help <command>` output to discover subcommands
+  - Update frontend command UI to display subcommands in a tree or nested structure
+  - Add command execution support for subcommands with proper argument handling
+  - Cache subcommand structure in localStorage along with parent commands
+  - Add visual indicators (e.g., arrow icons) to show commands with subcommands
+  - Implement drill-down UI to explore subcommand hierarchies
+  - _Requirements: 9.3, 15.3_
 
 ## Phase 6: Input Sanitization
 
