@@ -38,6 +38,13 @@ function terminalApp() {
         async init() {
             console.log("init() called");
 
+            // Load saved manual port from localStorage
+            const savedManualPort = localStorage.getItem('zdm_manual_port');
+            if (savedManualPort) {
+                this.manualPort = savedManualPort;
+                console.log('Loaded saved manual port:', savedManualPort);
+            }
+
             // Load available ports
             await this.loadPorts();
 
@@ -143,6 +150,12 @@ function terminalApp() {
             if (!portToConnect) {
                 this.showStatus('Please select or enter a serial port', 'error');
                 return;
+            }
+
+            // Save manual port to localStorage if it was used
+            if (this.manualPort) {
+                localStorage.setItem('zdm_manual_port', this.manualPort);
+                console.log('Saved manual port to localStorage:', this.manualPort);
             }
 
             this.connecting = true;

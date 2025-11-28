@@ -266,13 +266,18 @@
             </aside>
         </div>
 
-        <div x-show="showSettings" class="fixed inset-0 z-50" style="display: none;">
+        <div x-show="showSettings" 
+             @keydown.enter.window="if(showSettings) saveSettings()"
+             class="fixed inset-0 z-50" 
+             style="display: none;">
             <!-- Backdrop -->
             <div class="absolute inset-0 bg-black bg-opacity-50" @click="showSettings = false"></div>
 
             <!-- Slide-in Sidebar -->
             <aside class="absolute right-0 top-0 h-full w-full sm:w-96 max-w-md bg-white shadow-xl overflow-auto"
-                @click.stop x-show="showSettings" x-transition:enter="transform transition ease-out duration-300"
+                @click.stop 
+                x-show="showSettings" 
+                x-transition:enter="transform transition ease-out duration-300"
                 x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
                 x-transition:leave="transform transition ease-in duration-200" x-transition:leave-start="translate-x-0"
                 x-transition:leave-end="translate-x-full">
@@ -293,6 +298,7 @@
                         </label>
                         <div class="flex space-x-2">
                             <select x-model="selectedPort"
+                                @keydown.enter="saveSettings()"
                                 class="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 :disabled="loadingPorts">
                                 <option value="">Select a port...</option>
@@ -310,7 +316,10 @@
                             <label class="block text-xs text-gray-500 mb-1">
                                 Or enter port manually:
                             </label>
-                            <input type="text" x-model="manualPort" @input="if(manualPort) selectedPort = manualPort"
+                            <input type="text" 
+                                x-model="manualPort" 
+                                @input="if(manualPort) selectedPort = manualPort"
+                                @keydown.enter="saveSettings()"
                                 placeholder="/dev/pts/12"
                                 class="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </div>
@@ -321,6 +330,7 @@
                             Baud Rate
                         </label>
                         <select x-model="baudRate"
+                            @keydown.enter="saveSettings()"
                             class="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="9600">9600</option>
                             <option value="19200">19200</option>
