@@ -27,6 +27,8 @@ function terminalApp() {
         commandArgs: {},
         commandResult: '',
         expandedCommands: {}, // Track which commands are expanded to show subcommands
+        discoveringSubcommands: {}, // Track which commands are currently discovering subcommands
+        discoveryProgress: { current: 0, total: 0 }, // Track overall discovery progress
 
         // WebSocket and Terminal
         ws: null,
@@ -407,8 +409,13 @@ function terminalApp() {
                 // Wait for discovery to complete (with timeout)
                 await this.waitForDiscoveryCompletion(300);
 
-                this.showStatus('Commands scanned successfully!', 'success');
+                this.showStatus('Commands scanned successfully! Discovering subcommands...', 'success');
                 this.showCommands = true;
+                
+                // Automatically discover subcommands for all commands
+                await this.discoverAllSubcommands();
+                
+                this.showStatus('All commands scanned!', 'success');
             } catch (error) {
                 console.error('Error scanning commands:', error);
                 this.showStatus('Error scanning commands: ' + error.message, 'error');
@@ -417,6 +424,97 @@ function terminalApp() {
                 this.loadingCommands = false;
                 this.commandDiscoveryInProgress = false;
                 this.discoveryLock = false;
+            }
+        },
+
+        // Discover subcommands for all commands
+        async discoverAllSubcommands() {
+            if (this.commands.length === 0) return;
+            
+            this.discoveryProgress.total = this.commands.length;
+            this.discoveryProgress.current = 0;
+            
+            console.log(`Starting automatic subcommand discovery for ${this.commands.length} commands`);
+            
+            for (let i = 0; i < this.commands.length; i++) {
+                const cmd = this.commands[i];
+                
+                // Skip if already has subcommands
+                if (cmd.subcommands && cmd.subcommands.length > 0) {
+                    this.discoveryProgress.current++;
+                    continue;
+                }
+                
+                // Skip if already checked and has no subcommands
+                if (cmd.hasSubcommands === false) {
+                    this.discoveryProgress.current++;
+                    continue;
+                }
+                
+                try {
+                    // Mark as discovering
+                    this.discoveringSubcommands[cmd.id] = true;
+                    
+                    // Discover subcommands (without lock since we're already in a locked operation)
+                    await this.discoverSubcommandsInternal(cmd);
+                    
+                } catch (error) {
+                    console.error(`Error discovering subcommands for ${cmd.name}:`, error);
+                } finally {
+                    // Mark as done
+                    this.discoveringSubcommands[cmd.id] = false;
+                    this.discoveryProgress.current++;
+                }
+                
+                // Small delay between commands to avoid overwhelming the shell
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            console.log('Automatic subcommand discovery complete');
+        },
+
+        // Internal subcommand discovery (without lock checking)
+        async discoverSubcommandsInternal(command) {
+            this.commandDiscoveryInProgress = true;
+            this.discoveryCollectedData = '';
+
+            try {
+                console.log(`Discovering subcommands for: ${command.name}`);
+
+                // Send '<command> --help' to get subcommands (Zephyr shell syntax)
+                this.sendDiscoveryCommand(`${command.name} --help\n`);
+
+                // Wait for discovery to complete (with shorter timeout for subcommands)
+                await this.waitForSubcommandDiscovery(2000); // 2 seconds
+
+                console.log(`Discovery complete. Collected ${this.discoveryCollectedData.length} chars`);
+
+                // Parse subcommands from help output
+                const subcommands = this.parseSubcommands(this.discoveryCollectedData, command.name);
+
+                if (subcommands.length > 0) {
+                    // Update command with subcommands
+                    command.subcommands = subcommands;
+                    command.hasSubcommands = true;
+
+                    // Update in commands array
+                    const cmdIndex = this.commands.findIndex(c => c.id === command.id);
+                    if (cmdIndex !== -1) {
+                        this.commands[cmdIndex] = command;
+                    }
+
+                    // Save updated cache
+                    this.saveCachedCommands(this.commands);
+
+                    console.log(`Found ${subcommands.length} subcommands for ${command.name}`);
+                } else {
+                    command.hasSubcommands = false;
+                    console.log(`No subcommands found for ${command.name}`);
+                }
+            } catch (error) {
+                console.error('Error discovering subcommands:', error);
+            } finally {
+                this.commandDiscoveryInProgress = false;
             }
         },
 

@@ -77,7 +77,24 @@
 
                 <!-- Header -->
                 <div class="flex items-center justify-between p-4 border-b border-gray-200">
-                    <h2 class="text-2xl font-bold">Commands</h2>
+                    <div class="flex-1">
+                        <h2 class="text-2xl font-bold">Commands</h2>
+                        <!-- Discovery progress -->
+                        <div x-show="discoveryProgress.total > 0 && discoveryProgress.current < discoveryProgress.total" 
+                             class="mt-2">
+                            <div class="flex items-center text-xs text-gray-600">
+                                <svg class="animate-spin h-3 w-3 mr-1 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>Discovering subcommands: <span x-text="discoveryProgress.current"></span>/<span x-text="discoveryProgress.total"></span></span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                                <div class="bg-purple-600 h-1.5 rounded-full transition-all duration-300" 
+                                     :style="`width: ${(discoveryProgress.current / discoveryProgress.total * 100)}%`"></div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="flex items-center space-x-2">
                         <button @click="exportCommands()" class="text-gray-600 hover:text-gray-900"
                             title="Export commands">
@@ -140,18 +157,24 @@
                                         class="flex-1 text-left p-3 hover:bg-gray-100 transition">
                                         <div class="font-semibold text-gray-900 flex items-center">
                                             <span x-text="cmd.name"></span>
-                                            <span x-show="cmd.hasSubcommands || cmd.subcommands" 
+                                            
+                                            <!-- Spinner while discovering -->
+                                            <svg x-show="discoveringSubcommands[cmd.id]" 
+                                                 class="ml-2 animate-spin h-4 w-4 text-purple-600" 
+                                                 xmlns="http://www.w3.org/2000/svg" 
+                                                 fill="none" 
+                                                 viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            
+                                            <!-- Badge when subcommands found -->
+                                            <span x-show="!discoveringSubcommands[cmd.id] && (cmd.hasSubcommands || cmd.subcommands)" 
                                                   class="ml-2 text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded">
                                                 has subcommands
                                             </span>
                                         </div>
                                         <div class="text-sm text-gray-600" x-text="cmd.description"></div>
-                                        <!-- Test button to discover subcommands -->
-                                        <button @click.stop="discoverSubcommands(cmd)" 
-                                                x-show="!cmd.subcommands && cmd.hasSubcommands !== false"
-                                                class="mt-2 text-xs text-blue-600 hover:text-blue-800 underline">
-                                            Check for subcommands
-                                        </button>
                                     </button>
                                 </div>
                                 
