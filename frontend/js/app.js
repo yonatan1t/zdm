@@ -66,7 +66,29 @@ function terminalApp() {
 
             const term = new window.Terminal({
                 cursorBlink: true,
-                theme: { background: '#1e1e1e', foreground: '#d4d4d4' }
+                theme: { 
+                    background: '#0f172a', // slate-900
+                    foreground: '#e2e8f0', // slate-200
+                    cursor: '#818cf8', // indigo-400
+                    cursorAccent: '#0f172a',
+                    selection: '#334155', // slate-700
+                    black: '#1e293b',
+                    red: '#ef4444',
+                    green: '#10b981',
+                    yellow: '#f59e0b',
+                    blue: '#3b82f6',
+                    magenta: '#a855f7',
+                    cyan: '#06b6d4',
+                    white: '#cbd5e1',
+                    brightBlack: '#475569',
+                    brightRed: '#f87171',
+                    brightGreen: '#34d399',
+                    brightYellow: '#fbbf24',
+                    brightBlue: '#60a5fa',
+                    brightMagenta: '#c084fc',
+                    brightCyan: '#22d3ee',
+                    brightWhite: '#f1f5f9'
+                }
             });
 
             const fitAddon = new window.FitAddon.FitAddon();
