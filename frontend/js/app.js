@@ -13,6 +13,7 @@ function terminalApp() {
         statusMessageType: 'info',
         connecting: false,
         currentPort: '',
+        activeView: 'commands', // VSCode-style sidebar view
 
         // Command Discovery State
         showCommands: false,
@@ -138,7 +139,7 @@ function terminalApp() {
             if (this.connected) {
                 await this.disconnect();
             } else {
-                this.showSettings = true;
+                this.activeView = 'settings'; // Open settings view to connect
             }
         },
 
@@ -185,6 +186,7 @@ function terminalApp() {
                     this.connected = true;
                     this.currentPort = portToConnect;
                     this.showSettings = false;
+                    this.activeView = 'commands'; // Switch to commands view after connecting
                     this.showStatus('Connected to ' + portToConnect, 'success');
 
                     // Connect WebSocket
