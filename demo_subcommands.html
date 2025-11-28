@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subcommand UI Demo</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div x-data="demoApp()" class="max-w-2xl mx-auto">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold mb-6">Subcommand UI Demo</h1>
+            
+            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded">
+                <p class="text-sm text-blue-800">
+                    <strong>Instructions:</strong> Click the arrow (►) next to commands to expand and see subcommands.
+                    The arrow rotates (▼) when expanded.
+                </p>
+            </div>
+            
+            <!-- Commands List -->
+            <div class="space-y-2">
+                <template x-for="cmd in commands" :key="cmd.id">
+                    <div class="border border-gray-200 rounded">
+                        <!-- Parent Command -->
+                        <div class="flex items-start">
+                            <!-- Expand/Collapse Button -->
+                            <button 
+                                x-show="cmd.hasSubcommands || cmd.subcommands"
+                                @click.stop="toggleExpansion(cmd.id)"
+                                class="p-3 hover:bg-gray-50 transition flex-shrink-0">
+                                <svg class="w-4 h-4 transition-transform" 
+                                     :class="expandedCommands[cmd.id] ? 'rotate-90' : ''"
+                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                            
+                            <!-- Command Info -->
+                            <div class="flex-1 p-3">
+                                <div class="font-semibold text-gray-900 flex items-center">
+                                    <span x-text="cmd.name"></span>
+                                    <span x-show="cmd.hasSubcommands || cmd.subcommands" 
+                                          class="ml-2 text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded">
+                                        has subcommands
+                                    </span>
+                                </div>
+                                <div class="text-sm text-gray-600" x-text="cmd.description"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Subcommands (shown when expanded) -->
+                        <div x-show="expandedCommands[cmd.id] && cmd.subcommands" 
+                             class="ml-8 border-l-2 border-purple-200 bg-gray-50">
+                            <template x-for="subcmd in cmd.subcommands" :key="subcmd.id">
+                                <div class="p-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-100 cursor-pointer">
+                                    <div class="font-medium text-gray-800 text-sm" x-text="subcmd.name"></div>
+                                    <div class="text-xs text-gray-600" x-text="subcmd.description"></div>
+                                    <div class="text-xs text-purple-600 mt-1 font-mono">
+                                        Full: <span x-text="subcmd.fullName"></span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            
+            <!-- State Display -->
+            <div class="mt-6 p-4 bg-gray-50 rounded border border-gray-200">
+                <h3 class="font-semibold mb-2">Expansion State:</h3>
+                <pre class="text-xs" x-text="JSON.stringify(expandedCommands, null, 2)"></pre>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function demoApp() {
+            return {
+                expandedCommands: {},
+                commands: [
+                    {
+                        id: 'log',
+                        name: 'log',
+                        description: 'Logging commands',
+                        hasSubcommands: true,
+                        subcommands: [
+                            {
+                                id: 'log_backend',
+                                name: 'backend',
+                                fullName: 'log backend',
+                                description: 'Enable backend logging',
+                                parent: 'log'
+                            },
+                            {
+                                id: 'log_disable',
+                                name: 'disable',
+                                fullName: 'log disable',
+                                description: 'Disable logging',
+                                parent: 'log'
+                            },
+                            {
+                                id: 'log_enable',
+                                name: 'enable',
+                                fullName: 'log enable',
+                                description: 'Enable logging',
+                                parent: 'log'
+                            }
+                        ]
+                    },
+                    {
+                        id: 'device',
+                        name: 'device',
+                        description: 'Device management commands',
+                        hasSubcommands: true,
+                        subcommands: [
+                            {
+                                id: 'device_list',
+                                name: 'list',
+                                fullName: 'device list',
+                                description: 'List all devices',
+                                parent: 'device'
+                            },
+                            {
+                                id: 'device_info',
+                                name: 'info',
+                                fullName: 'device info',
+                                description: 'Show device information',
+                                parent: 'device'
+                            },
+                            {
+                                id: 'device_reset',
+                                name: 'reset',
+                                fullName: 'device reset',
+                                description: 'Reset the device',
+                                parent: 'device'
+                            }
+                        ]
+                    },
+                    {
+                        id: 'kernel',
+                        name: 'kernel',
+                        description: 'Kernel commands',
+                        hasSubcommands: true,
+                        subcommands: [
+                            {
+                                id: 'kernel_version',
+                                name: 'version',
+                                fullName: 'kernel version',
+                                description: 'Show kernel version',
+                                parent: 'kernel'
+                            },
+                            {
+                                id: 'kernel_threads',
+                                name: 'threads',
+                                fullName: 'kernel threads',
+                                description: 'List kernel threads',
+                                parent: 'kernel'
+                            }
+                        ]
+                    },
+                    {
+                        id: 'help',
+                        name: 'help',
+                        description: 'Show help information',
+                        hasSubcommands: false
+                    },
+                    {
+                        id: 'clear',
+                        name: 'clear',
+                        description: 'Clear the terminal screen',
+                        hasSubcommands: false
+                    }
+                ],
+                
+                toggleExpansion(cmdId) {
+                    this.expandedCommands[cmdId] = !this.expandedCommands[cmdId];
+                }
+            };
+        }
+    </script>
+</body>
+</html>

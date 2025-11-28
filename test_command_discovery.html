@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Command Discovery Test</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div x-data="testCommandDiscovery()" x-init="init()" class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6">Command Discovery Concurrency Test</h1>
+        
+        <!-- Test Controls -->
+        <div class="bg-white p-6 rounded-lg shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">Test Controls</h2>
+            <div class="space-y-4">
+                <div>
+                    <button @click="testConcurrentDiscovery()" 
+                            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                            :disabled="discoveryLock">
+                        Test Concurrent Discovery (should reject)
+                    </button>
+                    <span x-show="discoveryLock" class="ml-2 text-sm text-orange-600">
+                        🔒 Discovery locked
+                    </span>
+                </div>
+                
+                <div>
+                    <button @click="simulateDiscovery()" 
+                            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                            :disabled="discoveryLock">
+                        Simulate Discovery (3 seconds)
+                    </button>
+                </div>
+                
+                <div>
+                    <button @click="testSubcommandStructure()" 
+                            class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
+                        Test Subcommand Structure
+                    </button>
+                </div>
+                
+                <div>
+                    <button @click="clearResults()" 
+                            class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
+                        Clear Results
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Test Results -->
+        <div class="bg-white p-6 rounded-lg shadow">
+            <h2 class="text-xl font-semibold mb-4">Test Results</h2>
+            <div class="space-y-2">
+                <template x-for="(result, index) in testResults" :key="index">
+                    <div class="p-3 rounded border" 
+                         :class="result.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'">
+                        <div class="flex items-start">
+                            <span class="mr-2" x-text="result.success ? '✅' : '❌'"></span>
+                            <div class="flex-1">
+                                <div class="font-medium" x-text="result.message"></div>
+                                <div class="text-sm text-gray-600 mt-1" x-text="result.details"></div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                
+                <div x-show="testResults.length === 0" class="text-gray-500 text-center py-4">
+                    No test results yet. Run a test to see results.
+                </div>
+            </div>
+        </div>
+        
+        <!-- Mock Command List -->
+        <div class="bg-white p-6 rounded-lg shadow mt-6">
+            <h2 class="text-xl font-semibold mb-4">Mock Commands</h2>
+            <div class="space-y-2">
+                <template x-for="cmd in mockCommands" :key="cmd.id">
+                    <div class="border border-gray-200 rounded">
+                        <div class="flex items-start">
+                            <button 
+                                x-show="cmd.hasSubcommands || cmd.subcommands"
+                                @click="toggleExpansion(cmd.id)"
+                                class="p-3 hover:bg-gray-50">
+                                <svg class="w-4 h-4 transition-transform" 
+                                     :class="expandedCommands[cmd.id] ? 'rotate-90' : ''"
+                                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                            
+                            <div class="flex-1 p-3">
+                                <div class="font-semibold flex items-center">
+                                    <span x-text="cmd.name"></span>
+                                    <span x-show="cmd.hasSubcommands || cmd.subcommands" 
+                                          class="ml-2 text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded">
+                                        has subcommands
+                                    </span>
+                                </div>
+                                <div class="text-sm text-gray-600" x-text="cmd.description"></div>
+                            </div>
+                        </div>
+                        
+                        <div x-show="expandedCommands[cmd.id] && cmd.subcommands" 
+                             class="ml-8 border-l-2 border-purple-200 bg-gray-50">
+                            <template x-for="subcmd in cmd.subcommands" :key="subcmd.id">
+                                <div class="p-3 border-b border-gray-200 last:border-b-0">
+                                    <div class="font-medium text-sm" x-text="subcmd.name"></div>
+                                    <div class="text-xs text-gray-600" x-text="subcmd.description"></div>
+                                    <div class="text-xs text-purple-600 mt-1">
+                                        Full command: <span class="font-mono" x-text="subcmd.fullName"></span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function testCommandDiscovery() {
+            return {
+                discoveryLock: false,
+                discoveryInProgress: false,
+                testResults: [],
+                expandedCommands: {},
+                mockCommands: [],
+                
+                init() {
+                    this.addResult(true, 'Test suite initialized', 'Ready to run tests');
+                    this.createMockCommands();
+                },
+                
+                createMockCommands() {
+                    this.mockCommands = [
+                        {
+                            id: 'log',
+                            name: 'log',
+                            description: 'Logging commands',
+                            hasSubcommands: true,
+                            subcommands: [
+                                {
+                                    id: 'log_backend',
+                                    name: 'backend',
+                                    fullName: 'log backend',
+                                    description: 'Enable backend logging',
+                                    parent: 'log'
+                                },
+                                {
+                                    id: 'log_disable',
+                                    name: 'disable',
+                                    fullName: 'log disable',
+                                    description: 'Disable logging',
+                                    parent: 'log'
+                                }
+                            ]
+                        },
+                        {
+                            id: 'device',
+                            name: 'device',
+                            description: 'Device management commands',
+                            hasSubcommands: true,
+                            subcommands: [
+                                {
+                                    id: 'device_list',
+                                    name: 'list',
+                                    fullName: 'device list',
+                                    description: 'List all devices',
+                                    parent: 'device'
+                                },
+                                {
+                                    id: 'device_info',
+                                    name: 'info',
+                                    fullName: 'device info',
+                                    description: 'Show device information',
+                                    parent: 'device'
+                                }
+                            ]
+                        },
+                        {
+                            id: 'help',
+                            name: 'help',
+                            description: 'Show help information',
+                            hasSubcommands: false
+                        }
+                    ];
+                },
+                
+                async testConcurrentDiscovery() {
+                    this.addResult(true, 'Starting concurrent discovery test', 'Attempting to start two discoveries simultaneously');
+                    
+                    // Start first discovery
+                    const promise1 = this.simulateDiscovery();
+                    
+                    // Try to start second discovery immediately
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    if (this.discoveryLock) {
+                        // Try to start another discovery
+                        const rejected = !await this.tryStartDiscovery();
+                        
+                        if (rejected) {
+                            this.addResult(true, 'Concurrent discovery rejected', 'Second discovery attempt was properly rejected while first is in progress');
+                        } else {
+                            this.addResult(false, 'Concurrent discovery NOT rejected', 'Second discovery was allowed to start - this is a bug!');
+                        }
+                    } else {
+                        this.addResult(false, 'Lock not acquired', 'First discovery did not acquire lock');
+                    }
+                    
+                    // Wait for first discovery to complete
+                    await promise1;
+                },
+                
+                async tryStartDiscovery() {
+                    if (this.discoveryLock) {
+                        this.addResult(true, 'Discovery blocked', 'Attempt to start discovery was blocked by lock');
+                        return false;
+                    }
+                    return true;
+                },
+                
+                async simulateDiscovery() {
+                    if (this.discoveryLock) {
+                        this.addResult(false, 'Discovery already in progress', 'Cannot start new discovery');
+                        return;
+                    }
+                    
+                    this.discoveryLock = true;
+                    this.discoveryInProgress = true;
+                    this.addResult(true, 'Discovery started', 'Lock acquired, simulating 3-second discovery');
+                    
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    this.discoveryLock = false;
+                    this.discoveryInProgress = false;
+                    this.addResult(true, 'Discovery completed', 'Lock released');
+                },
+                
+                testSubcommandStructure() {
+                    this.addResult(true, 'Testing subcommand structure', 'Validating hierarchical command structure');
+                    
+                    let passed = 0;
+                    let failed = 0;
+                    
+                    // Test 1: Commands with subcommands have correct structure
+                    this.mockCommands.forEach(cmd => {
+                        if (cmd.subcommands) {
+                            cmd.subcommands.forEach(subcmd => {
+                                if (subcmd.fullName && subcmd.parent && subcmd.fullName.startsWith(subcmd.parent)) {
+                                    passed++;
+                                } else {
+                                    failed++;
+                                    this.addResult(false, 'Invalid subcommand structure', 
+                                        `Subcommand ${subcmd.name} has invalid fullName or parent`);
+                                }
+                            });
+                        }
+                    });
+                    
+                    // Test 2: Expansion state tracking
+                    const testCmd = this.mockCommands[0];
+                    this.expandedCommands[testCmd.id] = true;
+                    
+                    if (this.expandedCommands[testCmd.id] === true) {
+                        passed++;
+                    } else {
+                        failed++;
+                        this.addResult(false, 'Expansion tracking failed', 'Could not track command expansion state');
+                    }
+                    
+                    this.addResult(true, 'Subcommand structure test complete', 
+                        `Passed: ${passed}, Failed: ${failed}`);
+                },
+                
+                toggleExpansion(cmdId) {
+                    this.expandedCommands[cmdId] = !this.expandedCommands[cmdId];
+                },
+                
+                addResult(success, message, details) {
+                    this.testResults.push({
+                        success,
+                        message,
+                        details,
+                        timestamp: new Date().toLocaleTimeString()
+                    });
+                },
+                
+                clearResults() {
+                    this.testResults = [];
+                    this.addResult(true, 'Results cleared', 'Test results have been cleared');
+                }
+            };
+        }
+    </script>
+</body>
+</html>
