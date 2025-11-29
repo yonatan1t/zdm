@@ -659,11 +659,11 @@ function terminalApp() {
                         }
                     }
 
-                    // Check if data has stopped changing (no new data for 2 seconds)
+                    // Check if data has stopped changing (no new data for 0.5 seconds)
                     if (this.discoveryCollectedData.length === lastDataLength) {
                         noDataChangedCount++;
-                        if (noDataChangedCount >= 4) { // 2 seconds with no change
-                            console.log('No new data for 2 seconds, treating as complete');
+                        if (noDataChangedCount >= 2) { // 0.5 seconds with no change (2 * 250ms)
+                            console.log('No new data for 0.5 seconds, treating as complete');
                             const parsed = this.parseHelpOutput(this.discoveryCollectedData);
                             if (parsed.length > 0) {
                                 resolved = true;
@@ -693,8 +693,8 @@ function terminalApp() {
                         return;
                     }
 
-                    // Try again in 500ms
-                    setTimeout(checkCompletion, 500);
+                    // Try again in 250ms
+                    setTimeout(checkCompletion, 100);
                 };
 
                 checkCompletion();
@@ -715,10 +715,10 @@ function terminalApp() {
                     const elapsed = Date.now() - startTime;
                     console.log(`Subcommand discovery check: data length = ${this.discoveryCollectedData.length}, elapsed = ${elapsed}ms`);
 
-                    // Check if data has stopped changing (no new data for 1 second)
+                    // Check if data has stopped changing (no new data for 0.4 seconds)
                     if (this.discoveryCollectedData.length === lastDataLength) {
                         noDataChangedCount++;
-                        if (noDataChangedCount >= 2) { // 1 second with no change (2 * 500ms)
+                        if (noDataChangedCount >= 2) { // 0.4 seconds with no change (2 * 200ms)
                             console.log('Data stable, completing discovery');
                             resolved = true;
                             
@@ -741,8 +741,8 @@ function terminalApp() {
                         return;
                     }
 
-                    // Try again in 500ms
-                    setTimeout(checkCompletion, 500);
+                    // Try again in 200ms
+                    setTimeout(checkCompletion, 100);
                 };
 
                 checkCompletion();
