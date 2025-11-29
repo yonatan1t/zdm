@@ -34,6 +34,7 @@ function terminalApp() {
         // WebSocket and Terminal
         ws: null,
         terminal: null,
+        terminalFitAddon: null,
 
         // Initialize application (Now handles status checks/port loading)
         async init() {
@@ -97,15 +98,29 @@ function terminalApp() {
             const el = document.getElementById('terminal');
             term.open(el);
 
+            // Initial fit
             fitAddon.fit();
 
-            window.addEventListener('resize', () => {
-                fitAddon.fit();
-            });
+            // Debounced resize to prevent infinite loops
+            let resizeTimeout;
+            const debouncedFit = () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    fitAddon.fit();
+                }, 100);
+            };
+
+            // Window resize handler
+            window.addEventListener('resize', debouncedFit);
+
+            // Watch for parent container size changes (when sidebar opens/closes)
+            const resizeObserver = new ResizeObserver(debouncedFit);
+            resizeObserver.observe(el.parentElement);
 
             term.writeln("✅ Terminal initialized successfully and fitted");
 
             this.terminal = term;   // <-- critical line
+            this.terminalFitAddon = fitAddon; // Store fitAddon for later use
 
             // 💡 NEW CODE BLOCK START: Enable User Input (Tx)
             // Add event listener to send input data to the WebSocket
@@ -355,6 +370,13 @@ function terminalApp() {
             setTimeout(() => {
                 this.statusMessage = '';
             }, 5000);
+        },
+
+        // Resize terminal to fit container
+        resizeTerminal() {
+            if (this.terminalFitAddon) {
+                this.terminalFitAddon.fit();
+            }
         },
 
         // ============ COMMAND DISCOVERY SYSTEM ============
