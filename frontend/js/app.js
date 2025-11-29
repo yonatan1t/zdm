@@ -609,11 +609,11 @@ function terminalApp() {
 
             // Send command via WebSocket
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                this.commandResult = 'Sending command...';
                 this.ws.send(cmdString + '\n');
 
                 // Clear args for next command
                 this.commandArgs = {};
+                this.commandResult = ''; // Clear previous result
                 this.showStatus('Command sent: ' + cmdString, 'success');
             } else {
                 this.showStatus('WebSocket not connected', 'error');
