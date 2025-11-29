@@ -880,12 +880,10 @@ function terminalApp() {
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
 
-                // Look for "Subcommands:" or similar markers
-                // Also look for lines that indicate subcommand listing
-                if (line.toLowerCase().includes('subcommand') || 
-                    line.includes('Available commands:') ||
-                    line.toLowerCase().includes('options:') ||
-                    line.toLowerCase().includes('usage:')) {
+                // Look for "Subcommands:" marker specifically
+                // Don't confuse with "Usage:" which can appear in main description
+                if (line.toLowerCase() === 'subcommands:' || 
+                    line.toLowerCase().startsWith('subcommands:')) {
                     inSubcommandSection = true;
                     console.log(`✓ Found subcommand section at line ${i}: "${line}"`);
                     continue;
@@ -912,6 +910,9 @@ function terminalApp() {
                         }
 
                         // Look ahead for continuation lines and usage info
+                        let inUsageBlock = false;
+                        let usageLines = [];
+                        
                         for (let j = i + 1; j < lines.length; j++) {
                             const nextLine = lines[j];
 
@@ -924,25 +925,42 @@ function terminalApp() {
                                 break;
                             }
 
-                            // Stop if line contains colon (likely another section)
-                            if (nextLine.includes(':') && !nextLine.startsWith(' ')) {
-                                break;
-                            }
-
                             // Check if it's a usage line
                             if (nextLine.toLowerCase().includes('usage:')) {
-                                usage = nextLine;
+                                inUsageBlock = true;
+                                // Extract usage text after "Usage:"
+                                const usageText = nextLine.replace(/.*usage:\s*/i, '').trim();
+                                if (usageText) {
+                                    usageLines.push(usageText);
+                                }
                                 i = j;
                                 continue;
                             }
 
-                            // Add continuation if it's indented or looks like a continuation
-                            if (nextLine.startsWith(' ') || !nextLine.match(/^[A-Z]/)) {
-                                subCmdDesc += ' ' + nextLine;
+                            // If in usage block, collect indented lines
+                            if (inUsageBlock && nextLine.startsWith(' ')) {
+                                usageLines.push(nextLine.trim());
                                 i = j;
-                            } else {
+                                continue;
+                            }
+
+                            // Stop if line contains colon and not indented (likely another section)
+                            if (nextLine.includes(':') && !nextLine.startsWith(' ')) {
                                 break;
                             }
+
+                            // Add continuation if it's indented or looks like a continuation
+                            if (!inUsageBlock && (nextLine.startsWith(' ') || !nextLine.match(/^[A-Z]/))) {
+                                subCmdDesc += ' ' + nextLine;
+                                i = j;
+                            } else if (!inUsageBlock) {
+                                break;
+                            }
+                        }
+                        
+                        // Build usage string
+                        if (usageLines.length > 0) {
+                            usage = usageLines.join(' ');
                         }
 
                         // Parse arguments from description and usage
@@ -1022,7 +1040,11 @@ function terminalApp() {
                         const cmdName = cmdMatch[1];
                         let cmdDesc = cmdMatch[2].trim();
 
-                        // Look ahead for continuation lines
+                        // Look ahead for continuation lines and extract usage
+                        let fullDesc = cmdDesc;
+                        let usageLines = [];
+                        let inUsageBlock = false;
+                        
                         for (let j = i + 1; j < lines.length; j++) {
                             const nextLine = lines[j];
 
@@ -1031,25 +1053,64 @@ function terminalApp() {
                                 break;
                             }
 
+                            // Check for Usage: marker
+                            if (nextLine.toLowerCase().includes('usage:')) {
+                                inUsageBlock = true;
+                                const usageText = nextLine.replace(/.*usage:\s*/i, '').trim();
+                                if (usageText) {
+                                    usageLines.push(usageText);
+                                }
+                                fullDesc += ' ' + nextLine;
+                                i = j;
+                                continue;
+                            }
+
+                            // If in usage block, collect indented lines
+                            if (inUsageBlock && nextLine.startsWith(' ')) {
+                                usageLines.push(nextLine.trim());
+                                fullDesc += ' ' + nextLine;
+                                i = j;
+                                continue;
+                            }
+
+                            // Stop if not indented and we're in usage block
+                            if (inUsageBlock && !nextLine.startsWith(' ')) {
+                                break;
+                            }
+
                             // If it's clearly not a continuation, stop
-                            if (nextLine.includes(':')) {
+                            if (nextLine.includes(':') && !nextLine.startsWith(' ')) {
                                 break;
                             }
 
                             // Add continuation
-                            cmdDesc += ' ' + nextLine;
-                            i = j; // Skip these lines
+                            fullDesc += ' ' + nextLine;
+                            i = j;
                         }
 
-                        // Parse arguments from description
-                        const args = this.parseArguments(cmdDesc);
+                        // Parse arguments from full description
+                        const args = this.parseArguments(fullDesc);
+                        
+                        // Build usage string
+                        let usage = '';
+                        if (usageLines.length > 0) {
+                            usage = usageLines.join(' ');
+                        } else {
+                            // Generate basic usage from command name and args
+                            usage = cmdName;
+                            if (args.length > 0) {
+                                usage += ' ' + args.map(arg => 
+                                    arg.required ? `<${arg.name}>` : `[<${arg.name}>]`
+                                ).join(' ');
+                            }
+                        }
 
                         commands.push({
                             id: cmdName,
                             name: cmdName,
                             description: cmdDesc,
-                            usage: '',
-                            helpText: cmdDesc,
+                            usage: usage,
+                            helpText: fullDesc,
                             args: args,
                             hasSubcommands: null, // null = unknown, true = has, false = none
                             subcommands: null
