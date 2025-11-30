@@ -620,6 +620,23 @@ function terminalApp() {
             }
         },
 
+        // Quick execute command from list (with required args check)
+        quickExecuteCommand(command) {
+            if (!command) return;
+            
+            // Check if command has required arguments
+            const hasRequiredArgs = command.args && command.args.some(arg => arg.required);
+            
+            if (hasRequiredArgs) {
+                // Open command detail page to fill in required args
+                this.selectedCommand = command;
+                this.showStatus('Please fill in required arguments', 'info');
+            } else {
+                // Execute immediately if no required args
+                this.executeCommand(command);
+            }
+        },
+
         // Send command during discovery
         sendDiscoveryCommand(command) {
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -816,7 +833,7 @@ function terminalApp() {
             // Matches: <address>, [<width>], <H:M:S>, [Y-m-d], <module_0>, etc.
             // Pattern matches: <anything> or [<anything>] or [anything]
             const argPattern = /(<[^>]+>|\[<[^\]>]+>\]|\[[^\]<>]+\])/g;
-            
+
             const matches = helpText.match(argPattern);
             
             if (matches) {
