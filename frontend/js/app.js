@@ -812,9 +812,11 @@ function terminalApp() {
         parseArguments(helpText) {
             const args = [];
             
-            // Look for arguments in format: <arg> or [<arg>]
-            // Matches: <address>, [<width>], <module_0>, etc.
-            const argPattern = /(<[\w_]+>|\[<[\w_]+>\])/g;
+            // Look for arguments in format: <arg> or [<arg>] or [arg]
+            // Matches: <address>, [<width>], <H:M:S>, [Y-m-d], <module_0>, etc.
+            // Pattern matches: <anything> or [<anything>] or [anything]
+            const argPattern = /(<[^>]+>|\[<[^\]>]+>\]|\[[^\]<>]+\])/g;
+            
             const matches = helpText.match(argPattern);
             
             if (matches) {
@@ -828,6 +830,7 @@ function terminalApp() {
                     seen.add(cleanArg);
                     
                     // Determine if required or optional
+                    // Required: starts with < (not [)
                     const required = match.startsWith('<');
                     
                     args.push({
