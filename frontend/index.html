@@ -536,21 +536,27 @@
                             </div>
                         </div>
 
-                        <button @click="saveSettings()"
-                            class="w-full inline-flex items-center justify-center px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:from-slate-700 disabled:to-slate-700 text-white font-semibold rounded-md shadow-sm text-xs"
-                            :disabled="!selectedPort || connecting">
+                        <button @click="connected ? disconnect() : saveSettings()"
+                            class="w-full inline-flex items-center justify-center px-3 py-2 font-semibold rounded-md shadow-sm text-xs text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                            :class="connected ? 'bg-rose-600 hover:bg-rose-700' : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600'"
+                            :disabled="!connected && (!selectedPort || connecting)">
                             <svg x-show="connecting" class="w-3 h-3 mr-1.5 animate-spin" fill="none"
                                 stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
                                 </path>
                             </svg>
-                            <svg x-show="!connecting" class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor"
+                            <svg x-show="!connecting && !connected" class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor"
                                 viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                             </svg>
-                            <span x-text="connecting ? 'Connecting...' : 'Connect'"></span>
+                            <svg x-show="!connecting && connected" class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            <span x-text="connecting ? 'Connecting...' : (connected ? 'Disconnect' : 'Connect')"></span>
                         </button>
                     </div>
                 </div>
