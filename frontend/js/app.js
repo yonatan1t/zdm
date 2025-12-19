@@ -17,11 +17,15 @@ function terminalApp() {
         sidebarWidth: 320,
         isResizing: false,
 
-        // Multi-session state
+        // Multi-session & Layout state
         sessions: [], // Array of { id, port, baudrate, connected, terminal, fitAddon, ws, promptBuffer }
-        activeSessionId: null,
+        layoutGroups: [], // Array of { id, sessionIds, activeSessionId }
+        activeSessionId: null, // Legacy: still used for "global" context (e.g. settings)
 
-        currentPromptBuffer: '',
+        // Drag & Drop State
+        draggedSessionId: null,
+        dragOverGroupId: null,
+        dragOverPosition: null, // 'top', 'bottom', 'left', 'right', 'center'
 
         // Command Discovery State
         showCommands: false,
@@ -91,6 +95,13 @@ function terminalApp() {
             // Watch for view changes to save
             this.$watch('activeView', (value) => {
                 localStorage.setItem('zdm_active_view', value);
+            });
+
+            // Handle window resize for all terminals
+            window.addEventListener('resize', () => {
+                this.sessions.forEach(s => {
+                    if (s.terminal && s.fitAddon) s.fitAddon.fit();
+                });
             });
         },
 
@@ -268,13 +279,13 @@ function terminalApp() {
                 if (data.sessions && data.sessions.length > 0) {
                     // Try to restore order and active port from localStorage
                     let openPorts = [];
-                    let activePort = null;
+                    let savedGroups = [];
                     const savedState = localStorage.getItem('zdm_session_state');
                     if (savedState) {
                         try {
                             const parsed = JSON.parse(savedState);
                             openPorts = parsed.openPorts || [];
-                            activePort = parsed.activePort;
+                            savedGroups = parsed.layoutGroups || [];
                         } catch (e) {
                             console.error('Error parsing session state:', e);
                         }
@@ -283,56 +294,54 @@ function terminalApp() {
                     // Map backend sessions to frontend session objects
                     const backendSessions = data.sessions;
 
-                    // First, restore sessions in the saved order
+                    // Restore sessions
                     const restoredSessions = [];
-                    openPorts.forEach(port => {
-                        const backendSess = backendSessions.find(s => s.port === port);
-                        if (backendSess) {
-                            restoredSessions.push({
-                                id: 'session_' + Date.now() + Math.random().toString(36).substr(2, 9),
-                                port: backendSess.port,
-                                baudrate: backendSess.baudrate,
-                                connected: true,
-                                terminal: null,
-                                fitAddon: null,
-                                ws: null,
-                                promptBuffer: ''
-                            });
-                        }
-                    });
-
-                    // Add any backend sessions that weren't in our saved state
                     backendSessions.forEach(backendSess => {
-                        if (!restoredSessions.find(s => s.port === backendSess.port)) {
-                            restoredSessions.push({
-                                id: 'session_' + Date.now() + Math.random().toString(36).substr(2, 9),
-                                port: backendSess.port,
-                                baudrate: backendSess.baudrate,
-                                connected: true,
-                                terminal: null,
-                                fitAddon: null,
-                                ws: null,
-                                promptBuffer: ''
-                            });
-                        }
+                        restoredSessions.push({
+                            id: 'session_' + Math.random().toString(36).substr(2, 9),
+                            port: backendSess.port,
+                            baudrate: backendSess.baudrate,
+                            connected: true,
+                            terminal: null,
+                            fitAddon: null,
+                            ws: null,
+                            promptBuffer: ''
+                        });
                     });
 
                     this.sessions = restoredSessions;
 
-                    // Set active session
-                    if (activePort) {
-                        const activeSess = this.sessions.find(s => s.port === activePort);
-                        if (activeSess) {
-                            this.activeSessionId = activeSess.id;
-                        }
+                    // Restore Layout Groups
+                    if (savedGroups.length > 0) {
+                        // Reconstruct groups based on available sessions
+                        this.layoutGroups = savedGroups.map(g => {
+                            const availableSessionIds = g.sessionIds.filter(port =>
+                                this.sessions.find(s => s.port === port)
+                            ).map(port => this.sessions.find(s => s.port === port).id);
+
+                            if (availableSessionIds.length === 0) return null;
+
+                            const activeSess = this.sessions.find(s => s.port === g.activePort);
+                            return {
+                                id: g.id,
+                                sessionIds: availableSessionIds,
+                                activeSessionId: activeSess ? activeSess.id : availableSessionIds[0]
+                            };
+                        }).filter(g => g !== null);
                     }
 
+                    // Ensure at least one group exists
+                    if (this.layoutGroups.length === 0) {
+                        this.layoutGroups = [{
+                            id: 'group_default',
+                            sessionIds: this.sessions.map(s => s.id),
+                            activeSessionId: this.sessions.length > 0 ? this.sessions[0].id : null
+                        }];
+                    }
+
+                    // Set global active session if not set
                     if (!this.activeSessionId && this.sessions.length > 0) {
                         this.activeSessionId = this.sessions[0].id;
-                    }
-
-                    if (this.activeSessionId) {
-                        this.switchSession(this.activeSessionId);
                     }
 
                     // Initialize terminals for all restored sessions
@@ -345,6 +354,8 @@ function terminalApp() {
                                 this.connectWebSocket(session);
                             }
                         });
+                        // Switch to initial session to ensure fit
+                        if (this.activeSessionId) this.switchSession(this.activeSessionId);
                     });
                 }
             } catch (error) {
@@ -355,7 +366,12 @@ function terminalApp() {
         saveSessionState() {
             const state = {
                 openPorts: this.sessions.map(s => s.port),
-                activePort: this.activeSession ? this.activeSession.port : null
+                activePort: this.activeSession ? this.activeSession.port : null,
+                layoutGroups: this.layoutGroups.map(g => ({
+                    id: g.id,
+                    sessionIds: g.sessionIds.map(sid => this.sessions.find(s => s.id === sid).port),
+                    activePort: this.sessions.find(s => s.id === g.activeSessionId)?.port
+                }))
             };
             localStorage.setItem('zdm_session_state', JSON.stringify(state));
         },
@@ -389,16 +405,41 @@ function terminalApp() {
         },
 
         // Switch active session
-        switchSession(sessionId) {
+        switchSession(sessionId, groupId = null) {
+            console.log(`Switching to session ${sessionId} in group ${groupId}`);
+
+            // If groupId is provided, update that group's active session
+            if (groupId) {
+                const groupIdx = this.layoutGroups.findIndex(g => g.id === groupId);
+                if (groupIdx !== -1) {
+                    this.layoutGroups[groupIdx].activeSessionId = sessionId;
+                    // Force reactivity for the array
+                    this.layoutGroups = [...this.layoutGroups];
+                }
+            } else {
+                // Find which group contains this session and update it
+                const groupIdx = this.layoutGroups.findIndex(g => g.sessionIds.includes(sessionId));
+                if (groupIdx !== -1) {
+                    this.layoutGroups[groupIdx].activeSessionId = sessionId;
+                    this.layoutGroups = [...this.layoutGroups];
+                }
+            }
+
             this.activeSessionId = sessionId;
             const session = this.activeSession;
             if (session) {
                 this.currentPort = session.port;
                 this.connected = session.connected;
-                // Focus terminal
+                // Focus terminal and refit
                 this.$nextTick(() => {
                     if (session.terminal) {
-                        session.fitAddon.fit();
+                        const el = document.getElementById(`terminal-${session.id}`);
+                        if (el && session.terminal.element !== el) {
+                            console.log(`Re-attaching terminal ${session.id} to new DOM element`);
+                            session.terminal.open(el);
+                        }
+                        session.terminal.focus();
+                        if (session.fitAddon) session.fitAddon.fit();
                     }
                 });
                 this.saveSessionState();
@@ -426,13 +467,149 @@ function terminalApp() {
 
             if (session.ws) session.ws.close();
 
+            // Find group containing this session
+            const group = this.layoutGroups.find(g => g.sessionIds.includes(sessionId));
+            if (group) {
+                group.sessionIds = group.sessionIds.filter(id => id !== sessionId);
+
+                // If group is empty, remove it (unless it's the last one)
+                if (group.sessionIds.length === 0 && this.layoutGroups.length > 1) {
+                    this.layoutGroups = this.layoutGroups.filter(g => g.id !== group.id);
+                } else if (group.activeSessionId === sessionId) {
+                    group.activeSessionId = group.sessionIds.length > 0 ? group.sessionIds[0] : null;
+                }
+            }
+
             this.sessions = this.sessions.filter(s => s.id !== sessionId);
 
             if (this.activeSessionId === sessionId) {
                 this.activeSessionId = this.sessions.length > 0 ? this.sessions[0].id : null;
-                this.switchSession(this.activeSessionId);
+                if (this.activeSessionId) this.switchSession(this.activeSessionId);
             }
             this.saveSessionState();
+        },
+
+        // Drag & Drop Handlers
+        handleDragStart(sessionId) {
+            this.draggedSessionId = sessionId;
+            document.body.classList.add('dragging');
+        },
+
+        handleDragEnd() {
+            this.draggedSessionId = null;
+            this.dragOverGroupId = null;
+            this.dragOverPosition = null;
+            document.body.classList.remove('dragging');
+        },
+
+        handleDragOver(event, groupId, position = 'center') {
+            event.preventDefault();
+
+            let finalPosition = position;
+
+            // If dragging over the main container, detect if it's near an edge
+            if (position === 'center' && event.currentTarget.classList.contains('group')) {
+                const rect = event.currentTarget.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                const threshold = 50; // pixels from edge to trigger split
+
+                if (x < threshold) finalPosition = 'left';
+                else if (x > rect.width - threshold) finalPosition = 'right';
+                else if (y < threshold) finalPosition = 'top';
+                else if (y > rect.height - threshold) finalPosition = 'bottom';
+            }
+
+            if (this.dragOverGroupId !== groupId || this.dragOverPosition !== finalPosition) {
+                this.dragOverGroupId = groupId;
+                this.dragOverPosition = finalPosition;
+            }
+        },
+
+        handleDragLeave() {
+            this.dragOverGroupId = null;
+            this.dragOverPosition = null;
+        },
+
+        handleDrop(event, targetGroupId, position = 'center') {
+            event.preventDefault();
+            const sessionId = this.draggedSessionId;
+            if (!sessionId) return;
+
+            // Use the calculated dragOverPosition if we're dropping in 'center' and have a more specific one
+            const effectivePosition = (position === 'center' && this.dragOverPosition) ? this.dragOverPosition : position;
+
+            const sourceGroup = this.layoutGroups.find(g => g.sessionIds.includes(sessionId));
+            const targetGroup = this.layoutGroups.find(g => g.id === targetGroupId);
+
+            if (!sourceGroup || !targetGroup) return;
+
+            if (effectivePosition === 'center' || (sourceGroup.id === targetGroup.id && effectivePosition === 'center')) {
+                // Move session within the same group or to another tab bar
+                if (sourceGroup.id !== targetGroup.id) {
+                    sourceGroup.sessionIds = sourceGroup.sessionIds.filter(id => id !== sessionId);
+                    targetGroup.sessionIds.push(sessionId);
+
+                    // Cleanup source group if empty
+                    if (sourceGroup.sessionIds.length === 0 && this.layoutGroups.length > 1) {
+                        this.layoutGroups = this.layoutGroups.filter(g => g.id !== sourceGroup.id);
+                    } else if (sourceGroup.activeSessionId === sessionId) {
+                        sourceGroup.activeSessionId = sourceGroup.sessionIds[0];
+                    }
+                }
+                targetGroup.activeSessionId = sessionId;
+            } else {
+                // Split group
+                sourceGroup.sessionIds = sourceGroup.sessionIds.filter(id => id !== sessionId);
+
+                const newGroupId = 'group_' + Math.random().toString(36).substr(2, 9);
+                const newGroup = {
+                    id: newGroupId,
+                    sessionIds: [sessionId],
+                    activeSessionId: sessionId
+                };
+
+                const targetIdx = this.layoutGroups.indexOf(targetGroup);
+                if (effectivePosition === 'left' || effectivePosition === 'top') {
+                    this.layoutGroups.splice(targetIdx, 0, newGroup);
+                } else {
+                    this.layoutGroups.splice(targetIdx + 1, 0, newGroup);
+                }
+
+                // Cleanup source group if empty
+                if (sourceGroup.sessionIds.length === 0 && this.layoutGroups.length > 1) {
+                    this.layoutGroups = this.layoutGroups.filter(g => g.id !== sourceGroup.id);
+                } else if (sourceGroup.activeSessionId === sessionId) {
+                    sourceGroup.activeSessionId = sourceGroup.sessionIds[0];
+                }
+            }
+
+            this.handleDragEnd();
+
+            this.switchSession(sessionId);
+
+            // Refit all terminals after layout change
+            this.$nextTick(() => {
+                this.sessions.forEach(s => {
+                    if (s.terminal) {
+                        const el = document.getElementById(`terminal-${s.id}`);
+                        if (el && s.terminal.element !== el) {
+                            s.terminal.open(el);
+                        }
+                        if (s.fitAddon) s.fitAddon.fit();
+                    }
+                });
+            });
+
+            this.saveSessionState();
+        },
+
+        splitGroup(sessionId, position) {
+            const group = this.layoutGroups.find(g => g.sessionIds.includes(sessionId));
+            if (!group) return;
+
+            this.draggedSessionId = sessionId;
+            this.handleDrop({ preventDefault: () => { } }, group.id, position);
         },
 
         // Connect WebSocket for a specific session
@@ -582,6 +759,21 @@ function terminalApp() {
                     };
 
                     this.sessions.push(newSession);
+
+                    // Add to active group or create one
+                    if (this.layoutGroups.length === 0) {
+                        this.layoutGroups.push({
+                            id: 'group_default',
+                            sessionIds: [sessionId],
+                            activeSessionId: sessionId
+                        });
+                    } else {
+                        // Find group containing currently active session or just use the first one
+                        const activeGroup = this.layoutGroups.find(g => g.activeSessionId === this.activeSessionId) || this.layoutGroups[0];
+                        activeGroup.sessionIds.push(sessionId);
+                        activeGroup.activeSessionId = sessionId;
+                    }
+
                     this.activeSessionId = sessionId;
                     this.connected = true;
                     this.currentPort = portToConnect;
