@@ -418,17 +418,25 @@ function terminalApp() {
 
         // ============ REPEAT COMMANDS LOGIC ============
 
-        openRepeatModal(commandObj = null) {
-            if (commandObj) {
-                // If it's a command from the list
+        openRepeatModal(obj = null, isExisting = false) {
+            if (isExisting) {
+                // Editing an existing repeat command
+                this.repeatModalData = {
+                    id: obj.id,
+                    name: obj.name,
+                    command: obj.command,
+                    interval: obj.interval
+                };
+            } else if (obj) {
+                // Creating from a discovered command
                 this.repeatModalData = {
                     id: null,
-                    name: commandObj.fullName || commandObj.name,
-                    command: commandObj.fullName || commandObj.name,
+                    name: obj.fullName || obj.name,
+                    command: obj.fullName || obj.name,
                     interval: 1.0
                 };
             } else {
-                // For new raw command
+                // New raw command
                 this.repeatModalData = {
                     id: null,
                     name: '',
@@ -446,19 +454,41 @@ function terminalApp() {
                 return;
             }
 
-            const newCmd = {
-                id: Date.now(),
-                name: data.name || data.command,
-                command: data.command,
-                interval: parseFloat(data.interval),
-                active: false,
-                timerId: null
-            };
+            if (data.id) {
+                // Update existing
+                const index = this.repeatCommands.findIndex(rc => rc.id === data.id);
+                if (index !== -1) {
+                    const wasActive = this.repeatCommands[index].active;
 
-            this.repeatCommands.push(newCmd);
+                    // Update properties
+                    this.repeatCommands[index].name = data.name || data.command;
+                    this.repeatCommands[index].command = data.command;
+                    this.repeatCommands[index].interval = parseFloat(data.interval);
+
+                    // If it was active, we need to restart the timer with new settings
+                    if (wasActive) {
+                        this.toggleRepeatCommand(this.repeatCommands[index]); // Stop
+                        this.toggleRepeatCommand(this.repeatCommands[index]); // Start
+                    }
+
+                    this.showStatus('Repeat command updated', 'success');
+                }
+            } else {
+                // Create new
+                const newCmd = {
+                    id: Date.now(),
+                    name: data.name || data.command,
+                    command: data.command,
+                    interval: parseFloat(data.interval),
+                    active: false,
+                    timerId: null
+                };
+                this.repeatCommands.push(newCmd);
+                this.showStatus('Repeat command added', 'success');
+            }
+
             this.saveRepeatCommands();
             this.activeView = 'repeat';
-            this.showStatus('Repeat command added', 'success');
         },
 
         removeRepeatCommand(id) {
