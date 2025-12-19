@@ -454,9 +454,7 @@ function terminalApp() {
 
             session.ws.onopen = () => {
                 console.log(`WebSocket connected for ${session.port}`);
-                if (session.terminal) {
-                    session.terminal.write('\r\n[WebSocket connected]\r\n');
-                }
+                // WebSocket connected successfully
 
                 // Removed automatic \r on connect to avoid prompt flooding on refresh
             };
@@ -483,14 +481,12 @@ function terminalApp() {
 
             session.ws.onerror = (error) => {
                 console.error(`WebSocket error for ${session.port}:`, error);
-                if (session.terminal) session.terminal.write('\r\n[WebSocket error]\r\n');
+                // WebSocket error occurred
             };
 
             session.ws.onclose = () => {
                 console.log(`WebSocket disconnected for ${session.port}`);
-                if (session.terminal && session.connected) {
-                    session.terminal.write('\r\n[WebSocket disconnected]\r\n');
-                }
+                // WebSocket closed
             };
         },
 
