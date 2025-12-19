@@ -36,6 +36,15 @@ function terminalApp() {
         terminal: null,
         terminalFitAddon: null,
 
+        // Repeat Commands State
+        repeatCommands: [],
+        repeatModalData: {
+            id: null,
+            name: '',
+            command: '',
+            interval: 1.0
+        },
+
         // Initialize application (Now handles status checks/port loading)
         async init() {
             console.log("init() called");
@@ -52,6 +61,35 @@ function terminalApp() {
 
             // Check connection status
             await this.checkStatus();
+
+            // Load repeat commands
+            this.initRepeatCommands();
+        },
+
+        // Initialize Repeat Commands from localStorage
+        initRepeatCommands() {
+            const saved = localStorage.getItem('zdm_repeat_commands');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // Ensure active states are cleared on startup for safety
+                    this.repeatCommands = parsed.map(rc => ({
+                        ...rc,
+                        active: false,
+                        timerId: null
+                    }));
+                } catch (e) {
+                    console.error('Error loading repeat commands:', e);
+                }
+            }
+        },
+
+        saveRepeatCommands() {
+            // Only save the data, not the timer IDs or active status
+            const toSave = this.repeatCommands.map(({ id, name, command, interval }) => ({
+                id, name, command, interval
+            }));
+            localStorage.setItem('zdm_repeat_commands', JSON.stringify(toSave));
         },
 
         // Initialize xterm.js terminalS
@@ -370,9 +408,110 @@ function terminalApp() {
                 if (this.terminal) {
                     this.terminal.write('\r\n\r\n[Disconnected]\r\n');
                 }
+
+                // Stop all repeat commands on disconnect
+                this.stopAllRepeats();
             } catch (error) {
                 console.error('Error disconnecting:', error);
             }
+        },
+
+        // ============ REPEAT COMMANDS LOGIC ============
+
+        openRepeatModal(commandObj = null) {
+            if (commandObj) {
+                // If it's a command from the list
+                this.repeatModalData = {
+                    id: null,
+                    name: commandObj.fullName || commandObj.name,
+                    command: commandObj.fullName || commandObj.name,
+                    interval: 1.0
+                };
+            } else {
+                // For new raw command
+                this.repeatModalData = {
+                    id: null,
+                    name: '',
+                    command: '',
+                    interval: 1.0
+                };
+            }
+            this.activeView = 'repeat-create';
+        },
+
+        addRepeatCommand() {
+            const data = this.repeatModalData;
+            if (!data.command || !data.interval) {
+                this.showStatus('Command and interval are required', 'error');
+                return;
+            }
+
+            const newCmd = {
+                id: Date.now(),
+                name: data.name || data.command,
+                command: data.command,
+                interval: parseFloat(data.interval),
+                active: false,
+                timerId: null
+            };
+
+            this.repeatCommands.push(newCmd);
+            this.saveRepeatCommands();
+            this.activeView = 'repeat';
+            this.showStatus('Repeat command added', 'success');
+        },
+
+        removeRepeatCommand(id) {
+            const index = this.repeatCommands.findIndex(rc => rc.id === id);
+            if (index !== -1) {
+                if (this.repeatCommands[index].timerId) {
+                    clearInterval(this.repeatCommands[index].timerId);
+                }
+                this.repeatCommands.splice(index, 1);
+                this.saveRepeatCommands();
+            }
+        },
+
+        toggleRepeatCommand(rc) {
+            if (rc.active) {
+                // Stop
+                if (rc.timerId) {
+                    clearInterval(rc.timerId);
+                    rc.timerId = null;
+                }
+                rc.active = false;
+            } else {
+                // Start
+                if (!this.connected) {
+                    this.showStatus('Must be connected to start repeating', 'error');
+                    return;
+                }
+
+                rc.active = true;
+                this.executeRepeatCommand(rc); // Initial run
+                rc.timerId = setInterval(() => {
+                    this.executeRepeatCommand(rc);
+                }, rc.interval * 1000);
+            }
+        },
+
+        executeRepeatCommand(rc) {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(rc.command + '\n');
+            } else {
+                // If WS is closed, stop the repeat
+                this.toggleRepeatCommand(rc);
+            }
+        },
+
+        stopAllRepeats() {
+            this.repeatCommands.forEach(rc => {
+                if (rc.timerId) {
+                    clearInterval(rc.timerId);
+                    rc.timerId = null;
+                }
+                rc.active = false;
+            });
         },
 
         // Show status message
