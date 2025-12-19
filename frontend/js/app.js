@@ -290,7 +290,6 @@ function terminalApp() {
         async toggleConnection() {
             if (this.connected) {
                 await this.disconnect();
-            } else {
                 this.activeView = 'settings'; // Open settings view to connect
             }
         },
@@ -440,22 +439,38 @@ function terminalApp() {
             }
         },
 
-        // Save settings and connect to a new port
+        get connectButtonState() {
+            if (this.connecting) return 'connecting';
+            const port = this.manualPort || this.selectedPort;
+            if (!port) return 'connect';
+
+            const session = this.sessions.find(s => s.port === port && s.connected);
+            if (!session) return 'connect';
+
+            if (this.activeSessionId === session.id) return 'disconnect';
+            return 'switch';
+        },
+
+        // Save settings / Toggle connection
         async saveSettings() {
+            const state = this.connectButtonState;
             const portToConnect = this.manualPort || this.selectedPort;
 
-            if (!portToConnect) {
-                this.showStatus('Please select or enter a serial port', 'error');
+            if (state === 'switch') {
+                const session = this.sessions.find(s => s.port === portToConnect);
+                this.switchSession(session.id);
+                this.showSettings = false;
+                this.activeView = 'commands';
                 return;
             }
 
-            // If already connected to this port, just switch to it
-            const existingSession = this.sessions.find(s => s.port === portToConnect && s.connected);
-            if (existingSession) {
-                this.switchSession(existingSession.id);
-                this.showSettings = false;
-                this.activeView = 'commands';
-                this.showStatus('Switched to existing session for ' + portToConnect, 'info');
+            if (state === 'disconnect') {
+                await this.disconnect();
+                return;
+            }
+
+            if (!portToConnect) {
+                this.showStatus('Please select or enter a serial port', 'error');
                 return;
             }
 
