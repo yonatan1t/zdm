@@ -32,6 +32,14 @@ async def websocket_endpoint(websocket: WebSocket):
     
     # Log connection status
     print(f"WebSocket connected for port: {port}")
+
+    # Replay history to new connection
+    history = backend.get_history()
+    if history:
+        await websocket.send_text(history.decode('utf-8', errors='replace'))
+    else:
+        # If no history, send an initial enter to trigger the prompt
+        await backend.send(b'\r')
     
     # Queue for received data from serial port
     data_queue = asyncio.Queue(maxsize=1000)

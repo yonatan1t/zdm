@@ -85,7 +85,7 @@
 </head>
 
 <body class="bg-slate-900">
-    <div x-data="terminalApp()" x-init="init()" @mousemove.window="doResize" @mouseup.window="stopResizing"
+    <div x-data="terminalApp()" @mousemove.window="doResize" @mouseup.window="stopResizing"
         class="h-screen flex flex-col">
         <!-- Modern Header -->
         <header class="bg-slate-800 border-b border-slate-700 shadow-lg">

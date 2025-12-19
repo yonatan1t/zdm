@@ -55,6 +55,8 @@ function terminalApp() {
 
         // Initialize application (Now handles status checks/port loading)
         async init() {
+            if (this._initialized) return;
+            this._initialized = true;
             console.log("init() called");
 
             // Load saved manual port from localStorage
@@ -79,6 +81,17 @@ function terminalApp() {
             if (savedWidth) {
                 this.sidebarWidth = parseInt(savedWidth);
             }
+
+            // Load saved view
+            const savedView = localStorage.getItem('zdm_active_view');
+            if (savedView) {
+                this.activeView = savedView;
+            }
+
+            // Watch for view changes to save
+            this.$watch('activeView', (value) => {
+                localStorage.setItem('zdm_active_view', value);
+            });
         },
 
         // Initialize Repeat Commands from localStorage
@@ -253,20 +266,74 @@ function terminalApp() {
                 const data = await response.json();
 
                 if (data.sessions && data.sessions.length > 0) {
-                    this.sessions = data.sessions.map(s => ({
-                        id: 'session_' + Date.now() + Math.random().toString(36).substr(2, 9),
-                        port: s.port,
-                        baudrate: s.baudrate,
-                        connected: true,
-                        terminal: null,
-                        fitAddon: null,
-                        ws: null,
-                        promptBuffer: ''
-                    }));
+                    // Try to restore order and active port from localStorage
+                    let openPorts = [];
+                    let activePort = null;
+                    const savedState = localStorage.getItem('zdm_session_state');
+                    if (savedState) {
+                        try {
+                            const parsed = JSON.parse(savedState);
+                            openPorts = parsed.openPorts || [];
+                            activePort = parsed.activePort;
+                        } catch (e) {
+                            console.error('Error parsing session state:', e);
+                        }
+                    }
 
-                    // Switch to first session
-                    this.activeSessionId = this.sessions[0].id;
-                    this.switchSession(this.activeSessionId);
+                    // Map backend sessions to frontend session objects
+                    const backendSessions = data.sessions;
+
+                    // First, restore sessions in the saved order
+                    const restoredSessions = [];
+                    openPorts.forEach(port => {
+                        const backendSess = backendSessions.find(s => s.port === port);
+                        if (backendSess) {
+                            restoredSessions.push({
+                                id: 'session_' + Date.now() + Math.random().toString(36).substr(2, 9),
+                                port: backendSess.port,
+                                baudrate: backendSess.baudrate,
+                                connected: true,
+                                terminal: null,
+                                fitAddon: null,
+                                ws: null,
+                                promptBuffer: ''
+                            });
+                        }
+                    });
+
+                    // Add any backend sessions that weren't in our saved state
+                    backendSessions.forEach(backendSess => {
+                        if (!restoredSessions.find(s => s.port === backendSess.port)) {
+                            restoredSessions.push({
+                                id: 'session_' + Date.now() + Math.random().toString(36).substr(2, 9),
+                                port: backendSess.port,
+                                baudrate: backendSess.baudrate,
+                                connected: true,
+                                terminal: null,
+                                fitAddon: null,
+                                ws: null,
+                                promptBuffer: ''
+                            });
+                        }
+                    });
+
+                    this.sessions = restoredSessions;
+
+                    // Set active session
+                    if (activePort) {
+                        const activeSess = this.sessions.find(s => s.port === activePort);
+                        if (activeSess) {
+                            this.activeSessionId = activeSess.id;
+                        }
+                    }
+
+                    if (!this.activeSessionId && this.sessions.length > 0) {
+                        this.activeSessionId = this.sessions[0].id;
+                    }
+
+                    if (this.activeSessionId) {
+                        this.switchSession(this.activeSessionId);
+                    }
 
                     // Initialize terminals for all restored sessions
                     this.$nextTick(() => {
@@ -283,6 +350,14 @@ function terminalApp() {
             } catch (error) {
                 console.error('Error checking status:', error);
             }
+        },
+
+        saveSessionState() {
+            const state = {
+                openPorts: this.sessions.map(s => s.port),
+                activePort: this.activeSession ? this.activeSession.port : null
+            };
+            localStorage.setItem('zdm_session_state', JSON.stringify(state));
         },
 
         // Toggle connection
@@ -323,10 +398,10 @@ function terminalApp() {
                 // Focus terminal
                 this.$nextTick(() => {
                     if (session.terminal) {
-                        session.terminal.focus();
                         session.fitAddon.fit();
                     }
                 });
+                this.saveSessionState();
             } else {
                 this.currentPort = '';
                 this.connected = false;
@@ -357,6 +432,7 @@ function terminalApp() {
                 this.activeSessionId = this.sessions.length > 0 ? this.sessions[0].id : null;
                 this.switchSession(this.activeSessionId);
             }
+            this.saveSessionState();
         },
 
         // Connect WebSocket for a specific session
@@ -364,6 +440,10 @@ function terminalApp() {
             if (!session) return;
 
             if (session.ws) {
+                if (session.ws.readyState === WebSocket.OPEN || session.ws.readyState === WebSocket.CONNECTING) {
+                    // Already connected or connecting, no need to re-connect unless port changed
+                    return;
+                }
                 session.ws.close();
             }
 
@@ -378,9 +458,7 @@ function terminalApp() {
                     session.terminal.write('\r\n[WebSocket connected]\r\n');
                 }
 
-                if (session.ws.readyState === WebSocket.OPEN) {
-                    session.ws.send('\r');
-                }
+                // Removed automatic \r on connect to avoid prompt flooding on refresh
             };
 
             session.ws.onmessage = (event) => {
@@ -525,6 +603,7 @@ function terminalApp() {
                     });
 
                     this.showStatus('Connected to ' + portToConnect, 'success');
+                    this.saveSessionState();
                 } else {
                     this.showStatus('Failed to connect: ' + (data.message || 'Unknown error'), 'error');
                 }

@@ -7,6 +7,7 @@ import glob
 from typing import Optional, Callable
 from .base import BaseBackend
 import select
+from collections import deque
 
 
 class SerialBackend(BaseBackend):
@@ -17,6 +18,7 @@ class SerialBackend(BaseBackend):
         self.data_callback: Optional[Callable[[bytes], None]] = None
         self.read_task: Optional[asyncio.Task] = None
         self._connected = False
+        self.history_buffer = deque(maxlen=1024 * 100)  # Store last 100KB
     
     async def connect(self, port: str, baudrate: int = 115200, **kwargs) -> bool:
         """Connect to serial port.
@@ -105,6 +107,14 @@ class SerialBackend(BaseBackend):
             callback: Function to call when data is received
         """
         self.data_callback = callback
+
+    def get_history(self) -> bytes:
+        """Get the current history buffer content.
+        
+        Returns:
+            The raw bytes currently stored in the history buffer.
+        """
+        return bytes(self.history_buffer)
     
     async def _read_loop(self) -> None:
         """Background task to read data from serial port."""
@@ -132,6 +142,9 @@ class SerialBackend(BaseBackend):
                 data = await loop.run_in_executor(None, blocking_read)
                 
                 if data:
+                    # Append to history
+                    self.history_buffer.extend(data)
+                    
                     if self.data_callback:
                         self.data_callback(data)
                 else:
