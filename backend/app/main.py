@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pathlib import Path
 import os
+import sys
 
 from app.api import routes
 from app.api.websocket import websocket_endpoint
@@ -19,8 +20,14 @@ async def websocket(websocket: WebSocket):
     """WebSocket endpoint for serial communication."""
     await websocket_endpoint(websocket)
 
-# Serve frontend static files
-frontend_path = Path(__file__).parent.parent.parent / "frontend"
+# Determine frontend path (handle PyInstaller bundled app)
+if getattr(sys, 'frozen', False):
+    # Running as compiled executable
+    base_path = Path(sys._MEIPASS)
+    frontend_path = base_path / "frontend"
+else:
+    # Running as script
+    frontend_path = Path(__file__).parent.parent.parent / "frontend"
 if frontend_path.exists():
     # Serve JS files
     js_path = frontend_path / "js"

@@ -67,7 +67,7 @@ function terminalApp() {
 
             const term = new window.Terminal({
                 cursorBlink: true,
-                theme: { 
+                theme: {
                     background: '#0f172a', // slate-900
                     foreground: '#e2e8f0', // slate-200
                     cursor: '#818cf8', // indigo-400
@@ -116,8 +116,6 @@ function terminalApp() {
             // Watch for parent container size changes (when sidebar opens/closes)
             const resizeObserver = new ResizeObserver(debouncedFit);
             resizeObserver.observe(el.parentElement);
-
-            term.writeln("✅ Terminal initialized successfully and fitted");
 
             this.terminal = term;   // <-- critical line
             this.terminalFitAddon = fitAddon; // Store fitAddon for later use
@@ -387,24 +385,24 @@ function terminalApp() {
             if (cached) {
                 try {
                     this.commandsCache = JSON.parse(cached);
-                    
+
                     // Validate cache version and structure
                     if (!this.commandsCache.version || !this.commandsCache.commands) {
                         console.warn('Invalid cache structure, ignoring cache');
                         return false;
                     }
-                    
+
                     this.commands = this.commandsCache.commands || [];
                     this.lastScannedTime = this.commandsCache.lastScanned;
-                    
+
                     console.log(`Loaded ${this.commands.length} commands from cache`);
-                    
+
                     // Count commands with subcommands
                     const withSubcommands = this.commands.filter(c => c.subcommands && c.subcommands.length > 0).length;
                     if (withSubcommands > 0) {
                         console.log(`  ${withSubcommands} commands have subcommands`);
                     }
-                    
+
                     return true;
                 } catch (error) {
                     console.error('Error loading cached commands:', error);
@@ -425,7 +423,7 @@ function terminalApp() {
             this.commandsCache = cache;
             this.commands = commands;
             this.lastScannedTime = cache.lastScanned;
-            
+
             console.log(`Saved ${commands.length} commands to cache`);
         },
 
@@ -470,10 +468,10 @@ function terminalApp() {
 
                 this.showStatus('Commands scanned successfully! Discovering subcommands...', 'success');
                 this.showCommands = true;
-                
+
                 // Automatically discover subcommands for all commands
                 await this.discoverAllSubcommands();
-                
+
                 this.showStatus('All commands scanned!', 'success');
             } catch (error) {
                 console.error('Error scanning commands:', error);
@@ -489,34 +487,34 @@ function terminalApp() {
         // Discover subcommands for all commands
         async discoverAllSubcommands() {
             if (this.commands.length === 0) return;
-            
+
             this.discoveryProgress.total = this.commands.length;
             this.discoveryProgress.current = 0;
-            
+
             console.log(`Starting automatic subcommand discovery for ${this.commands.length} commands`);
-            
+
             for (let i = 0; i < this.commands.length; i++) {
                 const cmd = this.commands[i];
-                
+
                 // Skip if already has subcommands
                 if (cmd.subcommands && cmd.subcommands.length > 0) {
                     this.discoveryProgress.current++;
                     continue;
                 }
-                
+
                 // Skip if already checked and has no subcommands
                 if (cmd.hasSubcommands === false) {
                     this.discoveryProgress.current++;
                     continue;
                 }
-                
+
                 try {
                     // Mark as discovering
                     this.discoveringSubcommands[cmd.id] = true;
-                    
+
                     // Discover subcommands (without lock since we're already in a locked operation)
                     await this.discoverSubcommandsInternal(cmd);
-                    
+
                 } catch (error) {
                     console.error(`Error discovering subcommands for ${cmd.name}:`, error);
                 } finally {
@@ -524,11 +522,11 @@ function terminalApp() {
                     this.discoveringSubcommands[cmd.id] = false;
                     this.discoveryProgress.current++;
                 }
-                
+
                 // Small delay between commands to avoid overwhelming the shell
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
-            
+
             console.log('Automatic subcommand discovery complete');
         },
 
@@ -596,7 +594,7 @@ function terminalApp() {
             // Build command string with args
             // Use fullName for subcommands (e.g., "log backend"), otherwise use name
             let cmdString = command.fullName || command.name;
-            
+
             if (this.commandArgs && Object.keys(this.commandArgs).length > 0) {
                 for (const [argId, argValue] of Object.entries(this.commandArgs)) {
                     if (argValue && argValue.trim()) {
@@ -623,10 +621,10 @@ function terminalApp() {
         // Quick execute command from list (with required args check)
         quickExecuteCommand(command) {
             if (!command) return;
-            
+
             // Check if command has required arguments
             const hasRequiredArgs = command.args && command.args.some(arg => arg.required);
-            
+
             if (hasRequiredArgs) {
                 // Open command detail page to fill in required args
                 this.selectedCommand = command;
@@ -738,10 +736,10 @@ function terminalApp() {
                         if (noDataChangedCount >= 2) { // 0.4 seconds with no change (2 * 200ms)
                             console.log('Data stable, completing discovery');
                             resolved = true;
-                            
+
                             // Log the collected data for debugging
                             console.log('Collected help output:', this.discoveryCollectedData.substring(0, 200));
-                            
+
                             resolve();
                             return;
                         }
@@ -828,28 +826,28 @@ function terminalApp() {
         // Parse arguments from help text
         parseArguments(helpText) {
             const args = [];
-            
+
             // Look for arguments in format: <arg> or [<arg>] or [arg]
             // Matches: <address>, [<width>], <H:M:S>, [Y-m-d], <module_0>, etc.
             // Pattern matches: <anything> or [<anything>] or [anything]
             const argPattern = /(<[^>]+>|\[<[^\]>]+>\]|\[[^\]<>]+\])/g;
 
             const matches = helpText.match(argPattern);
-            
+
             if (matches) {
                 const seen = new Set();
                 matches.forEach(match => {
                     // Remove < > and [ ]
                     const cleanArg = match.replace(/[<>\[\]]/g, '');
-                    
+
                     // Skip duplicates
                     if (seen.has(cleanArg)) return;
                     seen.add(cleanArg);
-                    
+
                     // Determine if required or optional
                     // Required: starts with < (not [)
                     const required = match.startsWith('<');
-                    
+
                     args.push({
                         id: cleanArg,
                         name: cleanArg,
@@ -859,7 +857,7 @@ function terminalApp() {
                     });
                 });
             }
-            
+
             return args;
         },
 
@@ -884,10 +882,10 @@ function terminalApp() {
             // Format: "command --help" followed by "command - Description"
             if (lines.length <= 3) {
                 // Check if it's just a simple command description
-                const hasSimpleFormat = lines.some(line => 
+                const hasSimpleFormat = lines.some(line =>
                     line.includes(parentCommand) && line.includes('-') && !line.includes('--')
                 );
-                
+
                 if (hasSimpleFormat) {
                     console.log('✓ Simple help format detected (no subcommands)');
                     return subcommands; // Return empty array
@@ -902,7 +900,7 @@ function terminalApp() {
 
                 // Look for "Subcommands:" marker specifically
                 // Don't confuse with "Usage:" which can appear in main description
-                if (line.toLowerCase() === 'subcommands:' || 
+                if (line.toLowerCase() === 'subcommands:' ||
                     line.toLowerCase().startsWith('subcommands:')) {
                     inSubcommandSection = true;
                     console.log(`✓ Found subcommand section at line ${i}: "${line}"`);
@@ -913,7 +911,7 @@ function terminalApp() {
                     // Match subcommand line: "subcommand_name : Description"
                     // Also try to match: "  subcommand_name  Description" (without colon)
                     let cmdMatch = line.match(/^(\w[\w_-]*)\s+:\s*(.*)$/);
-                    
+
                     if (!cmdMatch) {
                         // Try alternative format: "  subcommand_name  Description"
                         cmdMatch = line.match(/^(\w[\w_-]+)\s{2,}(.+)$/);
@@ -932,7 +930,7 @@ function terminalApp() {
                         // Look ahead for continuation lines and usage info
                         let inUsageBlock = false;
                         let usageLines = [];
-                        
+
                         for (let j = i + 1; j < lines.length; j++) {
                             const nextLine = lines[j];
 
@@ -940,7 +938,7 @@ function terminalApp() {
                             if (nextLine.match(/^(\w[\w_-]*)\s+:/)) {
                                 break;
                             }
-                            
+
                             if (nextLine.match(/^(\w[\w_-]+)\s{2,}/)) {
                                 break;
                             }
@@ -977,7 +975,7 @@ function terminalApp() {
                                 break;
                             }
                         }
-                        
+
                         // Build usage string
                         if (usageLines.length > 0) {
                             usage = usageLines.join(' ');
@@ -1004,11 +1002,11 @@ function terminalApp() {
             }
 
             console.log(`=== RESULT: ${subcommands.length} subcommands found ===`);
-            
+
             if (subcommands.length === 0) {
                 console.log('No subcommands found. This command may not have subcommands.');
             }
-            
+
             return subcommands;
         },
 
@@ -1064,7 +1062,7 @@ function terminalApp() {
                         let fullDesc = cmdDesc;
                         let usageLines = [];
                         let inUsageBlock = false;
-                        
+
                         for (let j = i + 1; j < lines.length; j++) {
                             const nextLine = lines[j];
 
@@ -1110,7 +1108,7 @@ function terminalApp() {
 
                         // Parse arguments from full description
                         const args = this.parseArguments(fullDesc);
-                        
+
                         // Build usage string
                         let usage = '';
                         if (usageLines.length > 0) {
@@ -1119,7 +1117,7 @@ function terminalApp() {
                             // Generate basic usage from command name and args
                             usage = cmdName;
                             if (args.length > 0) {
-                                usage += ' ' + args.map(arg => 
+                                usage += ' ' + args.map(arg =>
                                     arg.required ? `<${arg.name}>` : `[<${arg.name}>]`
                                 ).join(' ');
                             }

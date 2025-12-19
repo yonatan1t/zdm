@@ -16,5 +16,5 @@ pip install -r requirements.txt
 
 REM Start the server
 echo Starting ZDM backend server...
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m app.startup
 
