@@ -4,14 +4,14 @@ from app.backends.serial_backend import SerialBackend
 
 
 class SerialManager:
-    """Manages serial port connections."""
+    """Manages multiple serial port connections."""
     
     def __init__(self):
-        self.backend: Optional[SerialBackend] = None
-        self.data_callback: Optional[callable] = None
+        # Map port names to SerialBackend instances
+        self.backends: dict[str, SerialBackend] = {}
     
     async def connect(self, port: str, baudrate: int = 115200, **kwargs) -> bool:
-        """Connect to serial port.
+        """Connect to a specific serial port.
         
         Args:
             port: Serial port name
@@ -21,47 +21,71 @@ class SerialManager:
         Returns:
             True if connection successful, False otherwise
         """
-        self.backend = SerialBackend()
+        if port in self.backends:
+            if self.backends[port].is_connected():
+                return True
+            # If not connected but exists, clean up
+            await self.backends[port].disconnect()
+            
+        backend = SerialBackend()
+        success = await backend.connect(port=port, baudrate=baudrate, **kwargs)
         
-        if self.data_callback:
-            self.backend.set_data_callback(self.data_callback)
-        
-        return await self.backend.connect(port=port, baudrate=baudrate, **kwargs)
+        if success:
+            self.backends[port] = backend
+            return True
+        return False
     
-    async def disconnect(self) -> None:
-        """Disconnect from serial port."""
-        if self.backend:
-            await self.backend.disconnect()
-            self.backend = None
-    
-    async def send(self, data: bytes) -> None:
-        """Send data to serial port.
+    async def disconnect(self, port: Optional[str] = None) -> None:
+        """Disconnect from one or all serial ports.
         
         Args:
+            port: Specific port to disconnect, or None for all
+        """
+        if port:
+            if port in self.backends:
+                await self.backends[port].disconnect()
+                del self.backends[port]
+        else:
+            # Disconnect all
+            for p in list(self.backends.keys()):
+                await self.backends[p].disconnect()
+            self.backends.clear()
+    
+    async def send(self, port: str, data: bytes) -> None:
+        """Send data to a specific serial port.
+        
+        Args:
+            port: Target port name
             data: Data to send
         """
-        if not self.backend or not self.backend.is_connected():
-            raise RuntimeError("Serial port not connected")
+        if port not in self.backends or not self.backends[port].is_connected():
+            raise RuntimeError(f"Serial port {port} not connected")
         
-        await self.backend.send(data)
+        await self.backends[port].send(data)
     
-    def is_connected(self) -> bool:
-        """Check if serial port is connected.
+    def is_connected(self, port: Optional[str] = None) -> bool:
+        """Check if a specific port or any port is connected.
         
+        Args:
+            port: Specific port to check, or None for 'any'
+            
         Returns:
             True if connected, False otherwise
         """
-        return self.backend is not None and self.backend.is_connected()
+        if port:
+            return port in self.backends and self.backends[port].is_connected()
+        return any(b.is_connected() for b in self.backends.values())
     
-    def set_data_callback(self, callback: callable) -> None:
-        """Set callback for received data.
+    def get_backend(self, port: str) -> Optional[SerialBackend]:
+        """Retrieve the backend instance for a port.
         
         Args:
-            callback: Function to call when data is received
+            port: Port name
+            
+        Returns:
+            SerialBackend instance or None
         """
-        self.data_callback = callback
-        if self.backend:
-            self.backend.set_data_callback(callback)
+        return self.backends.get(port)
     
     @staticmethod
     def list_ports() -> list[dict]:
