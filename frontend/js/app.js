@@ -345,14 +345,13 @@ function terminalApp() {
                 console.log('WebSocket connected');
                 if (this.terminal) {
                     this.terminal.write('\r\n[WebSocket connected]\r\n');
-                    // Test: write a test message to verify terminal works
-                    setTimeout(() => {
-                        if (this.terminal) {
-                            this.terminal.write('[Test: Terminal is working]\r\n');
-                        }
-                    }, 1000);
                 } else {
                     console.error('Terminal not initialized when WebSocket opened!');
+                }
+
+                // Send an initial "Enter" to trigger the shell prompt
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send('\r');
                 }
             };
 
