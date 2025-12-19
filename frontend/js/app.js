@@ -16,6 +16,11 @@ function terminalApp() {
         activeView: 'commands', // VSCode-style sidebar view
         sidebarWidth: 320,
         isResizing: false,
+
+        // Multi-session state
+        sessions: [], // Array of { id, port, baudrate, connected, terminal, fitAddon, ws, promptBuffer }
+        activeSessionId: null,
+
         currentPromptBuffer: '',
 
         // Command Discovery State
@@ -102,16 +107,13 @@ function terminalApp() {
             localStorage.setItem('zdm_repeat_commands', JSON.stringify(toSave));
         },
 
-        // Initialize xterm.js terminalS
-        initTerminal(fit) {
-            console.log("initTerminal() called");
+        // Initialize xterm.js terminal for a specific session
+        initTerminal(session, containerId = 'terminal') {
+            console.log(`initTerminal() called for ${session.port}`);
             if (!window.Terminal) {
                 console.error("xterm.js not loaded!");
                 return;
             }
-
-            // Defer initialization using $nextTick from the HTML for sizing stability
-            // ...
 
             const term = new window.Terminal({
                 cursorBlink: true,
@@ -143,13 +145,13 @@ function terminalApp() {
             const fitAddon = new window.FitAddon.FitAddon();
             term.loadAddon(fitAddon);
 
-            const el = document.getElementById('terminal');
+            const el = document.getElementById(containerId);
             term.open(el);
 
             // Initial fit
             fitAddon.fit();
 
-            // Debounced resize to prevent infinite loops
+            // Debounced resize
             let resizeTimeout;
             const debouncedFit = () => {
                 clearTimeout(resizeTimeout);
@@ -158,59 +160,43 @@ function terminalApp() {
                 }, 100);
             };
 
-            // Window resize handler
             window.addEventListener('resize', debouncedFit);
-
-            // Watch for parent container size changes (when sidebar opens/closes)
             const resizeObserver = new ResizeObserver(debouncedFit);
             resizeObserver.observe(el.parentElement);
 
-            this.terminal = term;   // <-- critical line
-            this.terminalFitAddon = fitAddon; // Store fitAddon for later use
-
             // Support Ctrl+C (Copy) and Ctrl+V (Paste)
             term.attachCustomKeyEventHandler(e => {
-                // If Ctrl+C is pressed
                 if (e.ctrlKey && e.code === 'KeyC') {
-                    // Only allow browser copy if text is actually selected
-                    if (term.hasSelection()) {
-                        return false;
-                    }
+                    if (term.hasSelection()) return false;
                 }
-                // If Ctrl+V is pressed, let the browser handle it
-                if (e.ctrlKey && e.code === 'KeyV') {
-                    return false;
-                }
+                if (e.ctrlKey && e.code === 'KeyV') return false;
                 return true;
             });
 
-            // 💡 NEW CODE BLOCK START: Enable User Input (Tx)
-            // Add event listener to send input data to the WebSocket
+            // Enable User Input (Tx)
             term.onData(data => {
                 // Buffer tracking for repeat command restoration
                 for (let i = 0; i < data.length; i++) {
                     const char = data[i];
                     if (char === '\r' || char === '\n') {
-                        this.currentPromptBuffer = '';
+                        session.promptBuffer = '';
                     } else if (char === '\x7f' || char === '\b') { // Backspace
-                        this.currentPromptBuffer = this.currentPromptBuffer.slice(0, -1);
+                        session.promptBuffer = session.promptBuffer.slice(0, -1);
                     } else if (char === '\x15') { // Ctrl+U
-                        this.currentPromptBuffer = '';
+                        session.promptBuffer = '';
                     } else if (char === '\x03') { // Ctrl+C
-                        this.currentPromptBuffer = '';
+                        session.promptBuffer = '';
                     } else if (char.length === 1 && char >= ' ' && char <= '~') { // Printable ASCII
-                        this.currentPromptBuffer += char;
+                        session.promptBuffer += char;
                     }
                 }
 
-                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    // Send the raw data (keystrokes) directly to the server via WebSocket
-                    this.ws.send(data);
-                } else {
-                    console.warn('Cannot send data: WebSocket is not open.');
+                if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+                    session.ws.send(data);
                 }
             });
-            // 💡 NEW CODE BLOCK END
+
+            return { term, fitAddon };
         },
 
         // ============ SIDEBAR RESIZING ============
@@ -266,11 +252,34 @@ function terminalApp() {
             try {
                 const response = await fetch('/api/status');
                 const data = await response.json();
-                this.connected = data.connected || false;
-                this.currentPort = data.port || '';
 
-                if (this.connected) {
-                    this.connectWebSocket();
+                if (data.sessions && data.sessions.length > 0) {
+                    this.sessions = data.sessions.map(s => ({
+                        id: 'session_' + Date.now() + Math.random().toString(36).substr(2, 9),
+                        port: s.port,
+                        baudrate: s.baudrate,
+                        connected: true,
+                        terminal: null,
+                        fitAddon: null,
+                        ws: null,
+                        promptBuffer: ''
+                    }));
+
+                    // Switch to first session
+                    this.activeSessionId = this.sessions[0].id;
+                    this.switchSession(this.activeSessionId);
+
+                    // Initialize terminals for all restored sessions
+                    this.$nextTick(() => {
+                        this.sessions.forEach(session => {
+                            const initResult = this.initTerminal(session, `terminal-${session.id}`);
+                            if (initResult) {
+                                session.terminal = initResult.term;
+                                session.fitAddon = initResult.fitAddon;
+                                this.connectWebSocket(session);
+                            }
+                        });
+                    });
                 }
             } catch (error) {
                 console.error('Error checking status:', error);
@@ -286,9 +295,153 @@ function terminalApp() {
             }
         },
 
-        // Save settings and connect
+        // Active session helpers for compatibility
+        get activeSession() {
+            return this.sessions.find(s => s.id === this.activeSessionId);
+        },
+        get terminal() {
+            return this.activeSession ? this.activeSession.terminal : null;
+        },
+        get terminalFitAddon() {
+            return this.activeSession ? this.activeSession.fitAddon : null;
+        },
+        get ws() {
+            return this.activeSession ? this.activeSession.ws : null;
+        },
+        get currentPromptBuffer() {
+            return this.activeSession ? this.activeSession.promptBuffer : '';
+        },
+        set currentPromptBuffer(val) {
+            if (this.activeSession) this.activeSession.promptBuffer = val;
+        },
+
+        // Switch active session
+        switchSession(sessionId) {
+            this.activeSessionId = sessionId;
+            const session = this.activeSession;
+            if (session) {
+                this.currentPort = session.port;
+                this.connected = session.connected;
+                // Focus terminal
+                this.$nextTick(() => {
+                    if (session.terminal) {
+                        session.terminal.focus();
+                        session.fitAddon.fit();
+                    }
+                });
+            } else {
+                this.currentPort = '';
+                this.connected = false;
+            }
+        },
+
+        // Close a session
+        async closeSession(sessionId) {
+            const session = this.sessions.find(s => s.id === sessionId);
+            if (!session) return;
+
+            // Disconnect if connected
+            if (session.connected) {
+                try {
+                    await fetch('/api/disconnect', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ port: session.port })
+                    });
+                } catch (e) { console.error("Disconnect error", e); }
+            }
+
+            if (session.ws) session.ws.close();
+
+            this.sessions = this.sessions.filter(s => s.id !== sessionId);
+
+            if (this.activeSessionId === sessionId) {
+                this.activeSessionId = this.sessions.length > 0 ? this.sessions[0].id : null;
+                this.switchSession(this.activeSessionId);
+            }
+        },
+
+        // Connect WebSocket for a specific session
+        connectWebSocket(session) {
+            if (!session) return;
+
+            if (session.ws) {
+                session.ws.close();
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws?port=${encodeURIComponent(session.port)}`;
+
+            session.ws = new WebSocket(wsUrl);
+
+            session.ws.onopen = () => {
+                console.log(`WebSocket connected for ${session.port}`);
+                if (session.terminal) {
+                    session.terminal.write('\r\n[WebSocket connected]\r\n');
+                }
+
+                if (session.ws.readyState === WebSocket.OPEN) {
+                    session.ws.send('\r');
+                }
+            };
+
+            session.ws.onmessage = (event) => {
+                if (this.commandDiscoveryInProgress && this.activeSessionId === session.id) {
+                    this.discoveryCollectedData += event.data;
+                }
+
+                if (event.data.length < 100 && event.data.trim().startsWith('{')) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'error') {
+                            if (session.terminal) session.terminal.writeln('\r\n[Error] ' + data.message);
+                        }
+                        return;
+                    } catch (e) { }
+                }
+
+                if (session.terminal) {
+                    session.terminal.write(event.data);
+                }
+            };
+
+            session.ws.onerror = (error) => {
+                console.error(`WebSocket error for ${session.port}:`, error);
+                if (session.terminal) session.terminal.write('\r\n[WebSocket error]\r\n');
+            };
+
+            session.ws.onclose = () => {
+                console.log(`WebSocket disconnected for ${session.port}`);
+                if (session.terminal && session.connected) {
+                    session.terminal.write('\r\n[WebSocket disconnected]\r\n');
+                }
+            };
+        },
+
+        // Disconnect from active session
+        async disconnect() {
+            const session = this.activeSession;
+            if (!session) return;
+
+            try {
+                await fetch('/api/disconnect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ port: session.port })
+                });
+
+                if (session.ws) session.ws.close();
+                session.connected = false;
+                this.connected = false; // Sync for global UI
+                this.showStatus('Disconnected from ' + session.port, 'info');
+            } catch (error) {
+                console.error('Error disconnecting:', error);
+                this.showStatus('Error disconnecting: ' + error.message, 'error');
+            }
+        },
+
+        // Save settings and connect to a new port
         async saveSettings() {
-            // Use manualPort if it has a value, otherwise use selectedPort from dropdown
             const portToConnect = this.manualPort || this.selectedPort;
 
             if (!portToConnect) {
@@ -296,44 +449,68 @@ function terminalApp() {
                 return;
             }
 
-            // Save manual port to localStorage if it was used
-            if (this.manualPort) {
-                localStorage.setItem('zdm_manual_port', this.manualPort);
-                console.log('Saved manual port to localStorage:', this.manualPort);
+            // If already connected to this port, just switch to it
+            const existingSession = this.sessions.find(s => s.port === portToConnect && s.connected);
+            if (existingSession) {
+                this.switchSession(existingSession.id);
+                this.showSettings = false;
+                this.activeView = 'commands';
+                this.showStatus('Switched to existing session for ' + portToConnect, 'info');
+                return;
             }
 
             this.connecting = true;
             this.statusMessage = '';
 
             try {
-                // Disconnect if already connected
-                if (this.connected) {
-                    await this.disconnect();
+                // Save manual port to localStorage
+                if (this.manualPort) {
+                    localStorage.setItem('zdm_manual_port', this.manualPort);
                 }
 
-                // Connect to serial port
                 const response = await fetch('/api/connect', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         port: portToConnect,
-                        baudrate: parseInt(this.baudRate)
+                        baudrate: parseInt(this.baudRate) || 115200
                     })
                 });
 
                 const data = await response.json();
 
                 if (data.status === 'connected') {
+                    // Create new session
+                    const sessionId = 'session_' + Date.now();
+                    const newSession = {
+                        id: sessionId,
+                        port: portToConnect,
+                        baudrate: parseInt(this.baudRate) || 115200,
+                        connected: true,
+                        terminal: null,
+                        fitAddon: null,
+                        ws: null,
+                        promptBuffer: ''
+                    };
+
+                    this.sessions.push(newSession);
+                    this.activeSessionId = sessionId;
                     this.connected = true;
                     this.currentPort = portToConnect;
                     this.showSettings = false;
-                    this.activeView = 'commands'; // Switch to commands view after connecting
-                    this.showStatus('Connected to ' + portToConnect, 'success');
+                    this.activeView = 'commands';
 
-                    // Connect WebSocket
-                    this.connectWebSocket();
+                    // Initialize terminal
+                    this.$nextTick(() => {
+                        const initResult = this.initTerminal(newSession, `terminal-${sessionId}`);
+                        if (initResult) {
+                            newSession.terminal = initResult.term;
+                            newSession.fitAddon = initResult.fitAddon;
+                            this.connectWebSocket(newSession);
+                        }
+                    });
+
+                    this.showStatus('Connected to ' + portToConnect, 'success');
                 } else {
                     this.showStatus('Failed to connect: ' + (data.message || 'Unknown error'), 'error');
                 }
@@ -342,130 +519,6 @@ function terminalApp() {
                 this.showStatus('Error connecting: ' + error.message, 'error');
             } finally {
                 this.connecting = false;
-            }
-        },
-
-        // Connect WebSocket
-        connectWebSocket() {
-            // Close existing connection
-            if (this.ws) {
-                this.ws.close();
-            }
-
-            // Determine WebSocket URL
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
-
-            this.ws = new WebSocket(wsUrl);
-
-            this.ws.onopen = () => {
-                console.log('WebSocket connected');
-                if (this.terminal) {
-                    this.terminal.write('\r\n[WebSocket connected]\r\n');
-                } else {
-                    console.error('Terminal not initialized when WebSocket opened!');
-                }
-
-                // Send an initial "Enter" to trigger the shell prompt
-                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    this.ws.send('\r');
-                }
-            };
-
-            // Track message count for debugging
-            let messageCount = 0;
-
-            this.ws.onmessage = (event) => {
-                messageCount++;
-                // Log first 10 messages, then every 100th message
-                if (messageCount <= 10 || messageCount % 100 === 0) {
-                    console.log(`[${messageCount}] WebSocket message: ${event.data.length} chars`,
-                        event.data.length > 0 ? `"${event.data.substring(0, Math.min(50, event.data.length))}"` : '(empty)');
-                }
-
-                // Collect data during command discovery
-                if (this.commandDiscoveryInProgress) {
-                    this.discoveryCollectedData += event.data;
-                }
-
-                // Check if message is JSON (error message)
-                // Only check if it starts with '{' and is short (JSON errors are short)
-                if (event.data.length < 100 && event.data.trim().startsWith('{')) {
-                    try {
-                        const data = JSON.parse(event.data);
-                        if (data.type === 'error') {
-                            console.error('WebSocket error:', data.message);
-                            if (this.terminal) {
-                                this.terminal.writeln('\r\n[Error] ' + data.message);
-                            }
-                        }
-                        return;
-                    } catch (e) {
-                        // Not valid JSON, continue as text
-                    }
-                }
-
-                // Treat as text data from serial port
-                if (!this.terminal) {
-                    console.error('Terminal not initialized!');
-                    return;
-                }
-
-                try {
-                    // Write data directly to terminal
-                    // xterm.js handles this efficiently
-                    this.terminal.write(event.data);
-
-                    // Log first few successful writes
-                    if (messageCount <= 5) {
-                        console.log(`[${messageCount}] Written to terminal successfully`);
-                    }
-                } catch (e) {
-                    console.error('Error writing to terminal:', e, 'Data:', event.data);
-                }
-            };
-
-            this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                if (this.terminal) {
-                    this.terminal.write('\r\n[WebSocket error]\r\n');
-                }
-            };
-
-            this.ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                if (this.terminal && this.connected) {
-                    this.terminal.write('\r\n[WebSocket disconnected]\r\n');
-                }
-            };
-        },
-
-        // Disconnect
-        async disconnect() {
-            try {
-                // Close WebSocket
-                if (this.ws) {
-                    this.ws.close();
-                    this.ws = null;
-                }
-
-                // Disconnect serial port
-                const response = await fetch('/api/disconnect', {
-                    method: 'POST'
-                });
-
-                const data = await response.json();
-                this.connected = false;
-                this.currentPort = '';
-
-                if (this.terminal) {
-                    this.terminal.write('\r\n\r\n[Disconnected]\r\n');
-                }
-
-                // Stop all repeat commands on disconnect
-                this.stopAllRepeats();
-            } catch (error) {
-                console.error('Error disconnecting:', error);
             }
         },
 
@@ -567,41 +620,38 @@ function terminalApp() {
                 rc.active = false;
             } else {
                 // Start
-                if (!this.connected) {
+                const session = this.activeSession;
+                if (!session || !session.connected) {
                     this.showStatus('Must be connected to start repeating', 'error');
                     return;
                 }
 
                 rc.active = true;
-                this.executeRepeatCommand(rc); // Initial run
+                this.executeRepeatCommand(rc, session); // Initial run
                 rc.timerId = setInterval(() => {
-                    this.executeRepeatCommand(rc);
+                    this.executeRepeatCommand(rc, session);
                 }, rc.interval * 1000);
             }
             if (this.terminal) this.terminal.focus();
         },
 
-        executeRepeatCommand(rc) {
-            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                const bufferToRestore = this.currentPromptBuffer;
+        executeRepeatCommand(rc, session) {
+            const targetSession = session || this.activeSession;
+            if (targetSession && targetSession.ws && targetSession.ws.readyState === WebSocket.OPEN) {
+                const bufferToRestore = targetSession.promptBuffer;
 
                 if (bufferToRestore) {
                     // 1. Clear current line on device (Ctrl+U)
-                    this.ws.send('\x15');
+                    targetSession.ws.send('\x15');
                 }
 
-                // 2. Send the periodic command (executes immediately)
-                this.ws.send(rc.command + '\r');
+                // 2. Send the periodic command
+                targetSession.ws.send(rc.command + '\r');
 
                 if (bufferToRestore) {
                     // 3. Restore the buffered text
-                    // We send it back so the shell echos it on the new prompt.
-                    // Data is sent sequentially via WebSocket.
-                    this.ws.send(bufferToRestore);
+                    targetSession.ws.send(bufferToRestore);
                 }
-            } else {
-                // If WS is closed, stop the repeat
-                this.toggleRepeatCommand(rc);
             }
         },
 

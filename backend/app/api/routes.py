@@ -1,4 +1,4 @@
-"""REST API routes."""
+from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 from app.services.serial_manager import SerialManager
@@ -33,18 +33,28 @@ async def connect(request: ConnectionRequest):
 
 
 @router.post("/disconnect")
-async def disconnect():
-    """Disconnect from serial port."""
-    await serial_manager.disconnect()
-    return {"status": "disconnected"}
+async def disconnect(request: Optional[ConnectionRequest] = None):
+    """Disconnect from a specific serial port or all if none specified."""
+    port = request.port if request else None
+    await serial_manager.disconnect(port)
+    return {"status": "disconnected", "port": port}
 
 
 @router.get("/status")
 async def get_status():
-    """Get connection status."""
+    """Get status of all active serial connections."""
+    active_sessions = []
+    for port, backend in serial_manager.backends.items():
+        if backend.is_connected():
+            active_sessions.append({
+                "port": port,
+                "baudrate": backend.serial_port.baudrate if backend.serial_port else None,
+                "connected": True
+            })
+    
     return {
-        "connected": serial_manager.is_connected(),
-        "port": serial_manager.backend.serial_port.port if serial_manager.backend and serial_manager.backend.serial_port else None
+        "sessions": active_sessions,
+        "any_connected": len(active_sessions) > 0
     }
 
 

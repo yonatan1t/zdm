@@ -8,34 +8,46 @@ async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for serial communication."""
     await websocket.accept()
     
+    # Get port from query params
+    port = websocket.query_params.get('port')
+    
+    if not port:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Missing port query parameter"
+        })
+        await websocket.close()
+        return
+
     serial_manager = get_serial_manager()
+    backend = serial_manager.get_backend(port)
+    
+    if not backend or not backend.is_connected():
+        await websocket.send_json({
+            "type": "error",
+            "message": f"Serial port {port} not connected"
+        })
+        await websocket.close()
+        return
     
     # Log connection status
-    print(f"WebSocket connected. Serial port connected: {serial_manager.is_connected()}")
+    print(f"WebSocket connected for port: {port}")
     
-    # Queue for received data from serial port (larger queue for high data rates)
+    # Queue for received data from serial port
     data_queue = asyncio.Queue(maxsize=1000)
     
-    # Use a simple queue - no need for complex buffering
-    # The queue itself handles batching, and we send data as it arrives
-    # Data callback to queue received data
     def sync_callback(data: bytes):
         """Callback for serial data - queues data for async processing."""
         try:
-            # Put data directly in queue (non-blocking)
-            # The queue will batch automatically as the consumer reads it
             try:
                 data_queue.put_nowait(data)
             except asyncio.QueueFull:
-                print("WARNING: Data queue full, dropping data")
+                print(f"WARNING: Data queue full for {port}, dropping data")
         except Exception as e:
-            print(f"Error in callback: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Error in callback for {port}: {e}")
     
-    print(f"WebSocket: Setting callback. Serial connected: {serial_manager.is_connected()}")
-    serial_manager.set_data_callback(sync_callback)
-    print(f"WebSocket: Callback set: {serial_manager.data_callback is not None}")
+    # Set the callback for THIS SPECIFIC backend instance
+    backend.set_data_callback(sync_callback)
     
     # Task to process queued data and send to WebSocket
     async def send_data_task():
@@ -46,19 +58,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 try:
                     text_data = data.decode('utf-8', errors='replace')
                     await websocket.send_text(text_data)
-                    # Only log occasionally to reduce noise
-                    # print(f"TX: {len(text_data)} chars -> WebSocket")
                 except Exception as e:
-                    print(f"ERROR: Failed to send to WebSocket: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    print(f"ERROR: Failed to send to WebSocket ({port}): {e}")
                     break
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"ERROR in send_data_task: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"ERROR in send_data_task ({port}): {e}")
                 break
     
     send_task = asyncio.create_task(send_data_task())
@@ -68,25 +74,26 @@ async def websocket_endpoint(websocket: WebSocket):
             # Receive message from client
             data = await websocket.receive_text()
             
-            # Send to serial port if connected
-            if serial_manager.is_connected():
+            # Send to THIS SPECIFIC serial port
+            if backend.is_connected():
                 try:
-                    await serial_manager.send(data.encode('utf-8'))
+                    await backend.send(data.encode('utf-8'))
                 except Exception as e:
                     await websocket.send_json({
                         "type": "error",
-                        "message": f"Error sending to serial port: {str(e)}"
+                        "message": f"Error sending to serial port {port}: {str(e)}"
                     })
             else:
                 await websocket.send_json({
                     "type": "error",
-                    "message": "Serial port not connected"
+                    "message": f"Serial port {port} disconnected"
                 })
+                break
     
     except WebSocketDisconnect:
-        print("WebSocket client disconnected")
+        print(f"WebSocket client disconnected for port: {port}")
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        print(f"WebSocket error for port {port}: {e}")
     finally:
         # Clean up
         send_task.cancel()
@@ -94,5 +101,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await send_task
         except asyncio.CancelledError:
             pass
-        serial_manager.set_data_callback(None)
-
+        
+        # Only clear callback if this backend still exists and it's our callback
+        if backend and backend.data_callback == sync_callback:
+            backend.set_data_callback(None)
