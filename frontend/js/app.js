@@ -16,6 +16,7 @@ function terminalApp() {
         activeView: 'commands', // VSCode-style sidebar view
         sidebarWidth: 320,
         isResizing: false,
+        currentPromptBuffer: '',
 
         // Command Discovery State
         showCommands: false,
@@ -186,6 +187,22 @@ function terminalApp() {
             // 💡 NEW CODE BLOCK START: Enable User Input (Tx)
             // Add event listener to send input data to the WebSocket
             term.onData(data => {
+                // Buffer tracking for repeat command restoration
+                for (let i = 0; i < data.length; i++) {
+                    const char = data[i];
+                    if (char === '\r' || char === '\n') {
+                        this.currentPromptBuffer = '';
+                    } else if (char === '\x7f' || char === '\b') { // Backspace
+                        this.currentPromptBuffer = this.currentPromptBuffer.slice(0, -1);
+                    } else if (char === '\x15') { // Ctrl+U
+                        this.currentPromptBuffer = '';
+                    } else if (char === '\x03') { // Ctrl+C
+                        this.currentPromptBuffer = '';
+                    } else if (char.length === 1 && char >= ' ' && char <= '~') { // Printable ASCII
+                        this.currentPromptBuffer += char;
+                    }
+                }
+
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     // Send the raw data (keystrokes) directly to the server via WebSocket
                     this.ws.send(data);
@@ -566,8 +583,22 @@ function terminalApp() {
 
         executeRepeatCommand(rc) {
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                // Use \r for Zephyr shell execute (standard practice)
+                const bufferToRestore = this.currentPromptBuffer;
+
+                if (bufferToRestore) {
+                    // 1. Clear current line on device (Ctrl+U)
+                    this.ws.send('\x15');
+                }
+
+                // 2. Send the periodic command (executes immediately)
                 this.ws.send(rc.command + '\r');
+
+                if (bufferToRestore) {
+                    // 3. Restore the buffered text
+                    // We send it back so the shell echos it on the new prompt.
+                    // Data is sent sequentially via WebSocket.
+                    this.ws.send(bufferToRestore);
+                }
             } else {
                 // If WS is closed, stop the repeat
                 this.toggleRepeatCommand(rc);
