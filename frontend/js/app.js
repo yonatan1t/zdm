@@ -120,6 +120,22 @@ function terminalApp() {
             this.terminal = term;   // <-- critical line
             this.terminalFitAddon = fitAddon; // Store fitAddon for later use
 
+            // Support Ctrl+C (Copy) and Ctrl+V (Paste)
+            term.attachCustomKeyEventHandler(e => {
+                // If Ctrl+C is pressed
+                if (e.ctrlKey && e.code === 'KeyC') {
+                    // Only allow browser copy if text is actually selected
+                    if (term.hasSelection()) {
+                        return false;
+                    }
+                }
+                // If Ctrl+V is pressed, let the browser handle it
+                if (e.ctrlKey && e.code === 'KeyV') {
+                    return false;
+                }
+                return true;
+            });
+
             // 💡 NEW CODE BLOCK START: Enable User Input (Tx)
             // Add event listener to send input data to the WebSocket
             term.onData(data => {
