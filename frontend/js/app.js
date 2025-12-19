@@ -130,9 +130,9 @@ function terminalApp() {
             localStorage.setItem('zdm_repeat_commands', JSON.stringify(toSave));
         },
 
-        // Initialize xterm.js terminal for a specific session
-        initTerminal(session, containerId = 'terminal') {
-            console.log(`initTerminal() called for ${session.port}`);
+        // Initialize terminal (returns term instance, doesn't attach yet if container not found)
+        initTerminal(session, containerId) {
+            if (session.terminal) return { term: session.terminal, fitAddon: session.fitAddon };
             if (!window.Terminal) {
                 console.error("xterm.js not loaded!");
                 return;
@@ -169,10 +169,11 @@ function terminalApp() {
             term.loadAddon(fitAddon);
 
             const el = document.getElementById(containerId);
-            term.open(el);
-
-            // Initial fit
-            fitAddon.fit();
+            if (el) {
+                term.open(el);
+                // Initial fit
+                fitAddon.fit();
+            }
 
             // Debounced resize
             let resizeTimeout;
@@ -430,16 +431,10 @@ function terminalApp() {
             if (session) {
                 this.currentPort = session.port;
                 this.connected = session.connected;
-                // Focus terminal and refit
                 this.$nextTick(() => {
                     if (session.terminal) {
-                        const el = document.getElementById(`terminal-${session.id}`);
-                        if (el && session.terminal.element !== el) {
-                            console.log(`Re-attaching terminal ${session.id} to new DOM element`);
-                            session.terminal.open(el);
-                        }
+                        this.attachTerminalToDom(session);
                         session.terminal.focus();
-                        if (session.fitAddon) session.fitAddon.fit();
                     }
                 });
                 this.saveSessionState();
@@ -591,13 +586,7 @@ function terminalApp() {
             // Refit all terminals after layout change
             this.$nextTick(() => {
                 this.sessions.forEach(s => {
-                    if (s.terminal) {
-                        const el = document.getElementById(`terminal-${s.id}`);
-                        if (el && s.terminal.element !== el) {
-                            s.terminal.open(el);
-                        }
-                        if (s.fitAddon) s.fitAddon.fit();
-                    }
+                    this.attachTerminalToDom(s);
                 });
             });
 
@@ -993,6 +982,34 @@ function terminalApp() {
         resizeTerminal() {
             if (this.terminalFitAddon) {
                 this.terminalFitAddon.fit();
+            }
+        },
+
+        // Helper to robustly attach terminal to DOM
+        attachTerminalToDom(session) {
+            if (!session || !session.terminal) return;
+
+            const containerId = `terminal-${session.id}`;
+            const el = document.getElementById(containerId);
+
+            if (!el) return;
+
+            // If terminal is not attached yet (element property is undefined or not in DOM)
+            if (!session.terminal.element || !session.terminal.element.parentNode) {
+                console.log(`First time open for ${session.port}`);
+                session.terminal.open(el);
+                if (session.fitAddon) session.fitAddon.fit();
+                return;
+            }
+
+            // If attached but to the WRONG parent (e.g. after split/move)
+            if (session.terminal.element.parentNode !== el) {
+                console.log(`Re-parenting terminal ${session.port} to new container`);
+                el.appendChild(session.terminal.element);
+                if (session.fitAddon) session.fitAddon.fit();
+            } else {
+                // Just refit to be safe
+                if (session.fitAddon) session.fitAddon.fit();
             }
         },
 
