@@ -90,8 +90,7 @@ function terminalApp() {
                     // Ensure active states are cleared on startup for safety
                     this.repeatCommands = parsed.map(rc => ({
                         ...rc,
-                        active: false,
-                        timerId: null
+                        runningSessions: [] // Array of { sessionId, port, timerId }
                     }));
                 } catch (e) {
                     console.error('Error loading repeat commands:', e);
@@ -579,18 +578,36 @@ function terminalApp() {
                 // Update existing
                 const index = this.repeatCommands.findIndex(rc => rc.id === data.id);
                 if (index !== -1) {
-                    const wasActive = this.repeatCommands[index].active;
+                    const rc = this.repeatCommands[index];
+                    const activeSessions = [...rc.runningSessions]; // Clone to restart
+
+                    // Stop for all sessions
+                    activeSessions.forEach(s => {
+                        if (s.timerId) clearInterval(s.timerId);
+                    });
+                    rc.runningSessions = [];
 
                     // Update properties
-                    this.repeatCommands[index].name = data.name || data.command;
-                    this.repeatCommands[index].command = data.command;
-                    this.repeatCommands[index].interval = parseFloat(data.interval);
+                    rc.name = data.name || data.command;
+                    rc.command = data.command;
+                    rc.interval = parseFloat(data.interval);
 
-                    // If it was active, we need to restart the timer with new settings
-                    if (wasActive) {
-                        this.toggleRepeatCommand(this.repeatCommands[index]); // Stop
-                        this.toggleRepeatCommand(this.repeatCommands[index]); // Start
-                    }
+                    // Restart for all sessions
+                    activeSessions.forEach(s => {
+                        const session = this.sessions.find(sess => sess.id === s.sessionId);
+                        if (session && session.connected) {
+                            const newRun = {
+                                sessionId: session.id,
+                                port: session.port,
+                                timerId: null
+                            };
+                            this.executeRepeatCommand(rc, session);
+                            newRun.timerId = setInterval(() => {
+                                this.executeRepeatCommand(rc, session);
+                            }, rc.interval * 1000);
+                            rc.runningSessions.push(newRun);
+                        }
+                    });
 
                     this.showStatus('Repeat command updated', 'success');
                 }
@@ -601,8 +618,7 @@ function terminalApp() {
                     name: data.name || data.command,
                     command: data.command,
                     interval: parseFloat(data.interval),
-                    active: false,
-                    timerId: null
+                    runningSessions: []
                 };
                 this.repeatCommands.push(newCmd);
                 this.showStatus('Repeat command added', 'success');
@@ -616,8 +632,11 @@ function terminalApp() {
         removeRepeatCommand(id) {
             const index = this.repeatCommands.findIndex(rc => rc.id === id);
             if (index !== -1) {
-                if (this.repeatCommands[index].timerId) {
-                    clearInterval(this.repeatCommands[index].timerId);
+                const rc = this.repeatCommands[index];
+                if (rc.runningSessions) {
+                    rc.runningSessions.forEach(s => {
+                        if (s.timerId) clearInterval(s.timerId);
+                    });
                 }
                 this.repeatCommands.splice(index, 1);
                 this.saveRepeatCommands();
@@ -626,26 +645,37 @@ function terminalApp() {
         },
 
         toggleRepeatCommand(rc) {
-            if (rc.active) {
-                // Stop
-                if (rc.timerId) {
-                    clearInterval(rc.timerId);
-                    rc.timerId = null;
+            const sessionId = this.activeSessionId;
+            if (!sessionId) return;
+
+            const existingSession = rc.runningSessions.find(s => s.sessionId === sessionId);
+
+            if (existingSession) {
+                // Stop for this session
+                if (existingSession.timerId) {
+                    clearInterval(existingSession.timerId);
                 }
-                rc.active = false;
+                rc.runningSessions = rc.runningSessions.filter(s => s.sessionId !== sessionId);
             } else {
-                // Start
+                // Start for this session
                 const session = this.activeSession;
                 if (!session || !session.connected) {
                     this.showStatus('Must be connected to start repeating', 'error');
                     return;
                 }
 
-                rc.active = true;
+                const newRun = {
+                    sessionId: session.id,
+                    port: session.port,
+                    timerId: null
+                };
+
                 this.executeRepeatCommand(rc, session); // Initial run
-                rc.timerId = setInterval(() => {
+                newRun.timerId = setInterval(() => {
                     this.executeRepeatCommand(rc, session);
                 }, rc.interval * 1000);
+
+                rc.runningSessions.push(newRun);
             }
             if (this.terminal) this.terminal.focus();
         },
@@ -672,11 +702,12 @@ function terminalApp() {
 
         stopAllRepeats() {
             this.repeatCommands.forEach(rc => {
-                if (rc.timerId) {
-                    clearInterval(rc.timerId);
-                    rc.timerId = null;
+                if (rc.runningSessions) {
+                    rc.runningSessions.forEach(s => {
+                        if (s.timerId) clearInterval(s.timerId);
+                    });
+                    rc.runningSessions = [];
                 }
-                rc.active = false;
             });
         },
 
