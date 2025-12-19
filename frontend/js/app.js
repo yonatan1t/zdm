@@ -489,6 +489,7 @@ function terminalApp() {
 
             this.saveRepeatCommands();
             this.activeView = 'repeat';
+            if (this.terminal) this.terminal.focus();
         },
 
         removeRepeatCommand(id) {
@@ -500,6 +501,7 @@ function terminalApp() {
                 this.repeatCommands.splice(index, 1);
                 this.saveRepeatCommands();
             }
+            if (this.terminal) this.terminal.focus();
         },
 
         toggleRepeatCommand(rc) {
@@ -523,11 +525,13 @@ function terminalApp() {
                     this.executeRepeatCommand(rc);
                 }, rc.interval * 1000);
             }
+            if (this.terminal) this.terminal.focus();
         },
 
         executeRepeatCommand(rc) {
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-                this.ws.send(rc.command + '\n');
+                // Use \r for Zephyr shell execute (standard practice)
+                this.ws.send(rc.command + '\r');
             } else {
                 // If WS is closed, stop the repeat
                 this.toggleRepeatCommand(rc);
@@ -701,7 +705,7 @@ function terminalApp() {
                     await this.discoverSubcommandsInternal(cmd);
 
                 } catch (error) {
-                    console.error(`Error discovering subcommands for ${cmd.name}:`, error);
+                    console.error(`Error discovering subcommands for ${cmd.name}: `, error);
                 } finally {
                     // Mark as done
                     this.discoveringSubcommands[cmd.id] = false;
@@ -721,7 +725,7 @@ function terminalApp() {
             this.discoveryCollectedData = '';
 
             try {
-                console.log(`Discovering subcommands for: ${command.name}`);
+                console.log(`Discovering subcommands for: ${command.name} `);
 
                 // Send '<command> --help' to get subcommands (Zephyr shell syntax)
                 this.sendDiscoveryCommand(`${command.name} --help\n`);
@@ -729,7 +733,7 @@ function terminalApp() {
                 // Wait for discovery to complete (with shorter timeout for subcommands)
                 await this.waitForSubcommandDiscovery(2000); // 2 seconds
 
-                console.log(`Discovery complete. Collected ${this.discoveryCollectedData.length} chars`);
+                console.log(`Discovery complete.Collected ${this.discoveryCollectedData.length} chars`);
 
                 // Parse subcommands from help output
                 const subcommands = this.parseSubcommands(this.discoveryCollectedData, command.name);
@@ -838,7 +842,7 @@ function terminalApp() {
                 const checkCompletion = () => {
                     if (resolved) return; // Prevent multiple resolutions
 
-                    console.log(`Discovery check: data length = ${this.discoveryCollectedData.length}, timeout in ${timeout - (Date.now() - startTime)}ms`);
+                    console.log(`Discovery check: data length = ${this.discoveryCollectedData.length}, timeout in ${timeout - (Date.now() - startTime)} ms`);
 
                     // Check if we have help output with commands
                     if (this.discoveryCollectedData.includes('Available commands:')) {
@@ -913,7 +917,7 @@ function terminalApp() {
                     if (resolved) return;
 
                     const elapsed = Date.now() - startTime;
-                    console.log(`Subcommand discovery check: data length = ${this.discoveryCollectedData.length}, elapsed = ${elapsed}ms`);
+                    console.log(`Subcommand discovery check: data length = ${this.discoveryCollectedData.length}, elapsed = ${elapsed} ms`);
 
                     // Check if data has stopped changing (no new data for 0.4 seconds)
                     if (this.discoveryCollectedData.length === lastDataLength) {
@@ -967,7 +971,7 @@ function terminalApp() {
             this.discoveryCollectedData = '';
 
             try {
-                console.log(`Discovering subcommands for: ${command.name}`);
+                console.log(`Discovering subcommands for: ${command.name} `);
 
                 // Send '<command> --help' to get subcommands (Zephyr shell syntax)
                 this.sendDiscoveryCommand(`${command.name} --help\n`);
@@ -975,7 +979,7 @@ function terminalApp() {
                 // Wait for discovery to complete (with shorter timeout for subcommands)
                 await this.waitForSubcommandDiscovery(2000); // 2 seconds
 
-                console.log(`Discovery complete. Collected ${this.discoveryCollectedData.length} chars`);
+                console.log(`Discovery complete.Collected ${this.discoveryCollectedData.length} chars`);
 
                 // Parse subcommands from help output
                 const subcommands = this.parseSubcommands(this.discoveryCollectedData, command.name);
@@ -1054,13 +1058,13 @@ function terminalApp() {
             const lines = cleanText.split('\n').map(line => line.trim()).filter(line => line.length > 0);
             const subcommands = [];
 
-            console.log(`=== PARSING SUBCOMMANDS FOR ${parentCommand} ===`);
+            console.log(`=== PARSING SUBCOMMANDS FOR ${parentCommand} === `);
             console.log('Raw help text:', helpText.substring(0, 200));
             console.log('Clean text:', cleanText.substring(0, 200));
             console.log('Number of lines:', lines.length);
             console.log('All lines:');
             for (let i = 0; i < lines.length; i++) {
-                console.log(`  [${i}] "${lines[i]}"`);
+                console.log(`  [${i}]"${lines[i]}"`);
             }
 
             // Check if this is a simple help output (no subcommands)
@@ -1171,9 +1175,9 @@ function terminalApp() {
                         const args = this.parseArguments(fullText);
 
                         subcommands.push({
-                            id: `${parentCommand}_${subCmdName}`,
+                            id: `${parentCommand}_${subCmdName} `,
                             name: subCmdName,
-                            fullName: `${parentCommand} ${subCmdName}`,
+                            fullName: `${parentCommand} ${subCmdName} `,
                             description: subCmdDesc,
                             parent: parentCommand,
                             usage: usage,
@@ -1181,12 +1185,12 @@ function terminalApp() {
                             args: args
                         });
 
-                        console.log(`  ✓ [${subCmdName}] "${subCmdDesc.substring(0, 50)}..." (${args.length} args)`);
+                        console.log(`  ✓[${subCmdName}] "${subCmdDesc.substring(0, 50)}..."(${args.length} args)`);
                     }
                 }
             }
 
-            console.log(`=== RESULT: ${subcommands.length} subcommands found ===`);
+            console.log(`=== RESULT: ${subcommands.length} subcommands found === `);
 
             if (subcommands.length === 0) {
                 console.log('No subcommands found. This command may not have subcommands.');
@@ -1226,10 +1230,10 @@ function terminalApp() {
 
                 if (line.includes('Available commands:')) {
                     inCommandSection = true;
-                    console.log(`✓ Found section marker at line ${i}`);
+                    console.log(`✓ Found section marker at line ${i} `);
                     console.log('Next 10 lines after marker:');
                     for (let j = i + 1; j < Math.min(i + 11, lines.length); j++) {
-                        console.log(`  [${j}] "${lines[j]}"`);
+                        console.log(`  [${j}]"${lines[j]}"`);
                     }
                     continue;
                 }
@@ -1303,7 +1307,7 @@ function terminalApp() {
                             usage = cmdName;
                             if (args.length > 0) {
                                 usage += ' ' + args.map(arg =>
-                                    arg.required ? `<${arg.name}>` : `[<${arg.name}>]`
+                                    arg.required ? `< ${arg.name}> ` : `[<${arg.name}>]`
                                 ).join(' ');
                             }
                         }
