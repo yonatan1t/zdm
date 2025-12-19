@@ -55,6 +55,7 @@ function terminalApp() {
             const savedManualPort = localStorage.getItem('zdm_manual_port');
             if (savedManualPort) {
                 this.manualPort = savedManualPort;
+                this.selectedPort = savedManualPort; // Sync with selectedPort so UI buttons work
                 console.log('Loaded saved manual port:', savedManualPort);
             }
 
