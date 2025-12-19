@@ -14,6 +14,8 @@ function terminalApp() {
         connecting: false,
         currentPort: '',
         activeView: 'commands', // VSCode-style sidebar view
+        sidebarWidth: 320,
+        isResizing: false,
 
         // Command Discovery State
         showCommands: false,
@@ -64,6 +66,12 @@ function terminalApp() {
 
             // Load repeat commands
             this.initRepeatCommands();
+
+            // Load saved sidebar width
+            const savedWidth = localStorage.getItem('zdm_sidebar_width');
+            if (savedWidth) {
+                this.sidebarWidth = parseInt(savedWidth);
+            }
         },
 
         // Initialize Repeat Commands from localStorage
@@ -185,6 +193,34 @@ function terminalApp() {
                 }
             });
             // 💡 NEW CODE BLOCK END
+        },
+
+        // ============ SIDEBAR RESIZING ============
+
+        startResizing(e) {
+            this.isResizing = true;
+            document.body.style.cursor = 'ew-resize';
+            document.body.style.userSelect = 'none'; // Prevent text selection
+        },
+
+        doResize(e) {
+            if (!this.isResizing) return;
+
+            // Minimal 150px, Maximal half screen
+            const newWidth = Math.max(150, Math.min(e.clientX - 48, window.innerWidth / 2));
+            this.sidebarWidth = newWidth;
+
+            // Debounced terminal fit to keep it snappy
+            this.resizeTerminal();
+        },
+
+        stopResizing() {
+            if (!this.isResizing) return;
+            this.isResizing = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            localStorage.setItem('zdm_sidebar_width', this.sidebarWidth);
+            this.resizeTerminal();
         },
 
         // Load available serial ports
