@@ -6,6 +6,7 @@ function terminalApp() {
         showSettings: false,
         selectedPort: '',
         manualPort: '',  // Add this line
+        theme: 'dark', // 'light' or 'dark'
         baudRate: '115200',
         availablePorts: [],
         loadingPorts: false,
@@ -62,6 +63,15 @@ function terminalApp() {
             if (this._initialized) return;
             this._initialized = true;
             console.log("init() called");
+
+            // Load theme
+            const savedTheme = localStorage.getItem('zdm_theme');
+            if (savedTheme) {
+                this.theme = savedTheme;
+            } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+                this.theme = 'light';
+            }
+            this.updateThemeClass();
 
             // Load saved manual port from localStorage
             const savedManualPort = localStorage.getItem('zdm_manual_port');
@@ -138,9 +148,11 @@ function terminalApp() {
                 return;
             }
 
+            const isDark = this.theme === 'dark';
+
             const term = new window.Terminal({
                 cursorBlink: true,
-                theme: {
+                theme: isDark ? {
                     background: '#0f172a', // slate-900
                     foreground: '#e2e8f0', // slate-200
                     cursor: '#818cf8', // indigo-400
@@ -155,6 +167,28 @@ function terminalApp() {
                     cyan: '#06b6d4',
                     white: '#cbd5e1',
                     brightBlack: '#475569',
+                    brightRed: '#f87171',
+                    brightGreen: '#34d399',
+                    brightYellow: '#fbbf24',
+                    brightBlue: '#60a5fa',
+                    brightMagenta: '#c084fc',
+                    brightCyan: '#22d3ee',
+                    brightWhite: '#f1f5f9'
+                } : {
+                    background: '#ffffff', // white
+                    foreground: '#1e293b', // slate-800
+                    cursor: '#6366f1', // indigo-500
+                    cursorAccent: '#ffffff',
+                    selection: '#cbd5e1', // slate-300
+                    black: '#000000',
+                    red: '#dc2626',
+                    green: '#059669',
+                    yellow: '#d97706',
+                    blue: '#2563eb',
+                    magenta: '#9333ea',
+                    cyan: '#0891b2',
+                    white: '#e2e8f0',
+                    brightBlack: '#334155',
                     brightRed: '#f87171',
                     brightGreen: '#34d399',
                     brightYellow: '#fbbf24',
@@ -221,6 +255,76 @@ function terminalApp() {
             });
 
             return { term, fitAddon };
+        },
+
+        updateThemeClass() {
+            if (this.theme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        },
+
+        toggleTheme() {
+            this.theme = this.theme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('zdm_theme', this.theme);
+            this.updateThemeClass();
+            this.refreshTerminalThemes();
+        },
+
+        refreshTerminalThemes() {
+            const isDark = this.theme === 'dark';
+            const theme = isDark ? {
+                background: '#0f172a', // slate-900
+                foreground: '#e2e8f0', // slate-200
+                cursor: '#818cf8', // indigo-400
+                cursorAccent: '#0f172a',
+                selection: '#334155', // slate-700
+                black: '#1e293b',
+                red: '#ef4444',
+                green: '#10b981',
+                yellow: '#f59e0b',
+                blue: '#3b82f6',
+                magenta: '#a855f7',
+                cyan: '#06b6d4',
+                white: '#cbd5e1',
+                brightBlack: '#475569',
+                brightRed: '#f87171',
+                brightGreen: '#34d399',
+                brightYellow: '#fbbf24',
+                brightBlue: '#60a5fa',
+                brightMagenta: '#c084fc',
+                brightCyan: '#22d3ee',
+                brightWhite: '#f1f5f9'
+            } : {
+                background: '#ffffff', // white
+                foreground: '#000000', // black
+                cursor: '#4f46e5', // indigo-600
+                cursorAccent: '#ffffff',
+                selection: '#cbd5e1', // slate-300
+                black: '#000000',
+                red: '#dc2626',
+                green: '#059669',
+                yellow: '#d97706',
+                blue: '#2563eb',
+                magenta: '#9333ea',
+                cyan: '#0891b2',
+                white: '#e2e8f0',
+                brightBlack: '#334155',
+                brightRed: '#f87171',
+                brightGreen: '#34d399',
+                brightYellow: '#fbbf24',
+                brightBlue: '#60a5fa',
+                brightMagenta: '#c084fc',
+                brightCyan: '#22d3ee',
+                brightWhite: '#f1f5f9'
+            };
+
+            this.sessions.forEach(session => {
+                if (session.terminal) {
+                    session.terminal.options.theme = theme;
+                }
+            });
         },
 
         // ============ SIDEBAR RESIZING ============
