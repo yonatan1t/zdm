@@ -7,6 +7,9 @@ function terminalApp() {
         selectedPort: '',
         manualPort: '',  // Add this line
         theme: 'dark', // 'light' or 'dark'
+        connectionMode: 'serial', // 'serial' or 'telnet'
+        telnetHost: 'localhost',
+        telnetPort: '23',
         baudRate: '115200',
         availablePorts: [],
         loadingPorts: false,
@@ -784,7 +787,15 @@ function terminalApp() {
 
         get connectButtonState() {
             if (this.connecting) return 'connecting';
-            const port = this.manualPort || this.selectedPort;
+
+            let port;
+            if (this.connectionMode === 'telnet') {
+                if (!this.telnetHost || !this.telnetPort) return 'connect';
+                port = `${this.telnetHost}:${this.telnetPort}`;
+            } else {
+                port = this.manualPort || this.selectedPort;
+            }
+
             if (!port) return 'connect';
 
             const session = this.sessions.find(s => s.port === port && s.connected);
@@ -797,7 +808,13 @@ function terminalApp() {
         // Save settings / Toggle connection
         async saveSettings() {
             const state = this.connectButtonState;
-            const portToConnect = this.manualPort || this.selectedPort;
+            let portToConnect;
+
+            if (this.connectionMode === 'telnet') {
+                portToConnect = `${this.telnetHost}:${this.telnetPort}`;
+            } else {
+                portToConnect = this.manualPort || this.selectedPort;
+            }
 
             if (state === 'switch') {
                 const session = this.sessions.find(s => s.port === portToConnect);
@@ -831,7 +848,8 @@ function terminalApp() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         port: portToConnect,
-                        baudrate: parseInt(this.baudRate) || 115200
+                        baudrate: parseInt(this.baudRate) || 115200,
+                        connection_type: this.connectionMode
                     })
                 });
 

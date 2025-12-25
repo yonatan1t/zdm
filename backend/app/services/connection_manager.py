@@ -1,22 +1,25 @@
 """Serial port manager service."""
 from typing import Optional
+from app.backends.base import BaseBackend
 from app.backends.serial_backend import SerialBackend
+from app.backends.telnet_backend import TelnetBackend
 
 
-class SerialManager:
-    """Manages multiple serial port connections."""
+class ConnectionManager:
+    """Manages multiple serial port and telnet connections."""
     
     def __init__(self):
-        # Map port names to SerialBackend instances
-        self.backends: dict[str, SerialBackend] = {}
+        # Map port names to Backend instances
+        self.backends: dict[str, BaseBackend] = {}
     
-    async def connect(self, port: str, baudrate: int = 115200, **kwargs) -> bool:
-        """Connect to a specific serial port.
+    async def connect(self, port: str, baudrate: int = 115200, connection_type: str = "serial", **kwargs) -> bool:
+        """Connect to a specific serial port or telnet host.
         
         Args:
-            port: Serial port name
-            baudrate: Baud rate
-            **kwargs: Additional serial port parameters
+            port: Serial port name or "host:port" for telnet
+            baudrate: Baud rate (serial only)
+            connection_type: "serial" or "telnet"
+            **kwargs: Additional parameters
             
         Returns:
             True if connection successful, False otherwise
@@ -27,8 +30,18 @@ class SerialManager:
             # If not connected but exists, clean up
             await self.backends[port].disconnect()
             
-        backend = SerialBackend()
-        success = await backend.connect(port=port, baudrate=baudrate, **kwargs)
+        if connection_type == "telnet":
+            backend = TelnetBackend()
+            # Parse host:port
+            try:
+                host, p = port.split(":")
+                success = await backend.connect(host=host, port=int(p))
+            except ValueError:
+                print(f"Invalid telnet address format: {port}")
+                return False
+        else:
+            backend = SerialBackend()
+            success = await backend.connect(port=port, baudrate=baudrate, **kwargs)
         
         if success:
             self.backends[port] = backend
@@ -59,7 +72,7 @@ class SerialManager:
             data: Data to send
         """
         if port not in self.backends or not self.backends[port].is_connected():
-            raise RuntimeError(f"Serial port {port} not connected")
+            raise RuntimeError(f"Connection {port} not connected")
         
         await self.backends[port].send(data)
     
@@ -76,14 +89,14 @@ class SerialManager:
             return port in self.backends and self.backends[port].is_connected()
         return any(b.is_connected() for b in self.backends.values())
     
-    def get_backend(self, port: str) -> Optional[SerialBackend]:
+    def get_backend(self, port: str) -> Optional[BaseBackend]:
         """Retrieve the backend instance for a port.
         
         Args:
             port: Port name
             
         Returns:
-            SerialBackend instance or None
+            Backend instance or None
         """
         return self.backends.get(port)
     

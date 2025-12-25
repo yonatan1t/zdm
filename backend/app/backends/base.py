@@ -46,4 +46,13 @@ class BaseBackend(ABC):
             callback: Function to call when data is received
         """
         pass
+        
+    @abstractmethod
+    def get_history(self) -> bytes:
+        """Get the current history buffer content.
+        
+        Returns:
+            The raw bytes currently stored in the history buffer.
+        """
+        pass
 

@@ -1,7 +1,7 @@
 """WebSocket endpoint for real-time serial communication."""
 import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
-from app.api.routes import get_serial_manager
+from app.api.routes import get_connection_manager
 
 
 async def websocket_endpoint(websocket: WebSocket):
@@ -19,8 +19,8 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close()
         return
 
-    serial_manager = get_serial_manager()
-    backend = serial_manager.get_backend(port)
+    connection_manager = get_connection_manager()
+    backend = connection_manager.get_backend(port)
     
     if not backend or not backend.is_connected():
         await websocket.send_json({

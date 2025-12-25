@@ -1,30 +1,33 @@
 from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
-from app.services.serial_manager import SerialManager
+from app.services.connection_manager import ConnectionManager
+from app.backends.serial_backend import SerialBackend
 
 router = APIRouter()
-serial_manager = SerialManager()
+connection_manager = ConnectionManager()
 
 
 class ConnectionRequest(BaseModel):
     port: str
     baudrate: int = 115200
+    connection_type: str = "serial"
 
 
 @router.get("/ports")
 async def list_ports():
     """List available serial ports."""
-    ports = SerialManager.list_ports()
+    ports = ConnectionManager.list_ports()
     return {"ports": ports}
 
 
 @router.post("/connect")
 async def connect(request: ConnectionRequest):
-    """Connect to serial port."""
-    success = await serial_manager.connect(
+    """Connect to serial port or telnet host."""
+    success = await connection_manager.connect(
         port=request.port,
-        baudrate=request.baudrate
+        baudrate=request.baudrate,
+        connection_type=request.connection_type
     )
     if success:
         return {"status": "connected", "port": request.port}
@@ -36,7 +39,7 @@ async def connect(request: ConnectionRequest):
 async def disconnect(request: Optional[ConnectionRequest] = None):
     """Disconnect from a specific serial port or all if none specified."""
     port = request.port if request else None
-    await serial_manager.disconnect(port)
+    await connection_manager.disconnect(port)
     return {"status": "disconnected", "port": port}
 
 
@@ -44,11 +47,16 @@ async def disconnect(request: Optional[ConnectionRequest] = None):
 async def get_status():
     """Get status of all active serial connections."""
     active_sessions = []
-    for port, backend in serial_manager.backends.items():
+    for port, backend in connection_manager.backends.items():
         if backend.is_connected():
+            baudrate = getattr(backend, 'serial_port', None)
+            baudrate = baudrate.baudrate if baudrate else getattr(backend, 'baudrate', None)
+            
+            # If still None (Telnet), maybe just skip or use default
+            
             active_sessions.append({
                 "port": port,
-                "baudrate": backend.serial_port.baudrate if backend.serial_port else None,
+                "baudrate": baudrate,
                 "connected": True
             })
     
@@ -58,8 +66,8 @@ async def get_status():
     }
 
 
-# Export serial_manager for WebSocket handler
-def get_serial_manager() -> SerialManager:
-    """Get serial manager instance."""
-    return serial_manager
+# Export connection_manager for WebSocket handler
+def get_connection_manager() -> ConnectionManager:
+    """Get connection manager instance."""
+    return connection_manager
 
