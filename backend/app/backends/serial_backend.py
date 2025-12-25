@@ -128,11 +128,20 @@ class SerialBackend(BaseBackend):
                     break
                 
                 def blocking_read():
-                    """Blocking read that waits for data based on pyserial timeout."""
+                    """Blocking read that waits for data with low latency."""
                     try:
-                        # Read available data, up to a large chunk size.
-                        # This will block for up to `timeout` seconds (set in connect).
-                        return self.serial_port.read(self.serial_port.in_waiting or 4096)
+                        # 1. Read at least 1 byte (blocking with timeout)
+                        # This returns immediately if data is available, or waits up to `timeout` (0.1s).
+                        first_byte = self.serial_port.read(1)
+                        if not first_byte:
+                            return b''
+                        
+                        # 2. Read whatever else is in the buffer immediately
+                        if self.serial_port.in_waiting > 0:
+                            remaining = self.serial_port.read(self.serial_port.in_waiting)
+                            return first_byte + remaining
+                        
+                        return first_byte
                     except (serial.SerialException, OSError) as e:
                         # This can happen if the device is disconnected.
                         print(f"Read error, disconnecting: {e}")

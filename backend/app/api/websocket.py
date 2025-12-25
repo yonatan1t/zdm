@@ -62,9 +62,28 @@ async def websocket_endpoint(websocket: WebSocket):
         """Task to send queued serial data to WebSocket."""
         while True:
             try:
+                # Get first item (blocking)
                 data = await data_queue.get()
+                
+                # Try to get more items if available immediately (up to 50 items or ~32KB to avoid latency)
+                # This creates a "batch" of data to send in one frame
+                batch_buffer = [data]
+                curr_size = len(data)
+                
                 try:
-                    text_data = data.decode('utf-8', errors='replace')
+                    # Collect pending items without blocking
+                    while not data_queue.empty() and len(batch_buffer) < 50 and curr_size < 32768:
+                        next_data = data_queue.get_nowait()
+                        batch_buffer.append(next_data)
+                        curr_size += len(next_data)
+                except asyncio.QueueEmpty:
+                    pass
+                
+                # Combine all chunks
+                combined_data = b''.join(batch_buffer)
+                
+                try:
+                    text_data = combined_data.decode('utf-8', errors='replace')
                     await websocket.send_text(text_data)
                 except Exception as e:
                     print(f"ERROR: Failed to send to WebSocket ({port}): {e}")

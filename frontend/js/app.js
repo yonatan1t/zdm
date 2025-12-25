@@ -208,6 +208,21 @@ function terminalApp() {
             const el = document.getElementById(containerId);
             if (el) {
                 term.open(el);
+
+                // Load WebGL Addon
+                try {
+                    if (window.WebglAddon) {
+                        const webglAddon = new window.WebglAddon.WebglAddon();
+                        webglAddon.onContextLoss(e => {
+                            webglAddon.dispose();
+                        });
+                        term.loadAddon(webglAddon);
+                        console.log("WebGL Addon loaded");
+                    }
+                } catch (e) {
+                    console.error("Failed to load WebGL addon", e);
+                }
+
                 // Initial fit
                 fitAddon.fit();
             }
