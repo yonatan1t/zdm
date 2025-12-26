@@ -319,14 +319,7 @@ function terminalApp() {
             }
         },
 
-        saveProject(saveAs = false) {
-            let filename = "project.zp";
-            if (saveAs) {
-                const name = prompt("Enter project filename:", "project");
-                if (!name) return; // User cancelled
-                filename = name.endsWith('.zp') ? name : name + '.zp';
-            }
-
+        async saveProject(saveAs = false) {
             const project = {
                 meta: {
                     version: "1.0",
@@ -351,7 +344,38 @@ function terminalApp() {
                 }
             };
 
-            const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+            const content = JSON.stringify(project, null, 2);
+
+            // Use File System Access API if available
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: 'project.zp',
+                        types: [{
+                            description: 'Zephyr Project File',
+                            accept: { 'application/json': ['.zp'] },
+                        }],
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(content);
+                    await writable.close();
+                    return;
+                } catch (err) {
+                    // If user cancels or error occurs, fall back to legacy method if saveAs was false
+                    if (err.name === 'AbortError') return;
+                    console.error('File Picker Error:', err);
+                }
+            }
+
+            // Fallback for browsers that don't support File System Access API
+            let filename = "project.zp";
+            if (saveAs) {
+                const name = prompt("Enter project filename:", "project");
+                if (!name) return; // User cancelled
+                filename = name.endsWith('.zp') ? name : name + '.zp';
+            }
+
+            const blob = new Blob([content], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
