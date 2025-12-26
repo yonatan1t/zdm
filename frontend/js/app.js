@@ -51,6 +51,10 @@ function terminalApp() {
         expandedCommands: {}, // Track which commands are expanded to show subcommands
         discoveringSubcommands: {}, // Track which commands are currently discovering subcommands
         discoveryProgress: { current: 0, total: 0 }, // Track overall discovery progress
+        discoveryStartTime: null, // Track when the scan started
+        showDiscoveryConfirm: false, // Show confirmation dialog for long scans
+        discoveryPaused: false, // Pause scanning for user confirmation
+        discoveryCancelRequested: false, // Allow user to cancel
 
         // WebSocket and Terminal
         ws: null,
@@ -1400,6 +1404,10 @@ function terminalApp() {
                 // Initiate discovery
                 this.commandDiscoveryInProgress = true;
                 this.discoveryCollectedData = '';
+                this.discoveryStartTime = Date.now();
+                this.showDiscoveryConfirm = false;
+                this.discoveryCancelRequested = false;
+                this.discoveryPaused = false;
 
                 console.log('Starting command discovery...');
 
@@ -1409,13 +1417,17 @@ function terminalApp() {
                 // Wait for discovery to complete (with timeout)
                 await this.waitForDiscoveryCompletion(300);
 
-                this.showStatus('Commands scanned successfully! Discovering subcommands...', 'success');
+                this.showStatus('Commands scanned successfully! Discovering deep subcommands...', 'success');
                 this.showCommands = true;
 
-                // Automatically discover subcommands for all commands
+                // Recursive deep discovery
                 await this.discoverAllSubcommands();
 
-                this.showStatus('All commands scanned!', 'success');
+                if (this.discoveryCancelRequested) {
+                    this.showStatus('Command discovery cancelled by user.', 'info');
+                } else {
+                    this.showStatus('All commands and deep subcommands scanned!', 'success');
+                }
             } catch (error) {
                 console.error('Error scanning commands:', error);
                 this.showStatus('Error scanning commands: ' + error.message, 'error');
@@ -1427,92 +1439,126 @@ function terminalApp() {
             }
         },
 
-        // Discover subcommands for all commands
+        // Recursive discovery for all commands and their children
         async discoverAllSubcommands() {
             if (this.commands.length === 0) return;
 
-            this.discoveryProgress.total = this.commands.length;
-            this.discoveryProgress.current = 0;
+            console.log(`Starting deep subcommand discovery for ${this.commands.length} top-level commands`);
 
-            console.log(`Starting automatic subcommand discovery for ${this.commands.length} commands`);
-
+            // We use a queue-like approach to discover all subcommands recursively
+            // but we process them top-level first for better UX
             for (let i = 0; i < this.commands.length; i++) {
+                if (this.discoveryCancelRequested) break;
+
                 const cmd = this.commands[i];
-
-                // Skip if already has subcommands
-                if (cmd.subcommands && cmd.subcommands.length > 0) {
-                    this.discoveryProgress.current++;
-                    continue;
-                }
-
-                // Skip if already checked and has no subcommands
-                if (cmd.hasSubcommands === false) {
-                    this.discoveryProgress.current++;
-                    continue;
-                }
-
-                try {
-                    // Mark as discovering
-                    this.discoveringSubcommands[cmd.id] = true;
-
-                    // Discover subcommands (without lock since we're already in a locked operation)
-                    await this.discoverSubcommandsInternal(cmd);
-
-                } catch (error) {
-                    console.error(`Error discovering subcommands for ${cmd.name}: `, error);
-                } finally {
-                    // Mark as done
-                    this.discoveringSubcommands[cmd.id] = false;
-                    this.discoveryProgress.current++;
-                }
-
-                // Small delay between commands to avoid overwhelming the shell
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await this.discoverDeep(cmd);
             }
 
-            console.log('Automatic subcommand discovery complete');
+            console.log('Deep subcommand discovery complete');
         },
 
-        // Internal subcommand discovery (without lock checking)
+        // Recursively discover subcommands for a command and its found children
+        async discoverDeep(command) {
+            if (this.discoveryCancelRequested) return;
+
+            // Check for 60-second timeout
+            if (!this.showDiscoveryConfirm && (Date.now() - this.discoveryStartTime > 60000)) {
+                this.showDiscoveryConfirm = true;
+                this.discoveryPaused = true;
+
+                // Wait for user to decide
+                while (this.discoveryPaused && !this.discoveryCancelRequested) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+                if (this.discoveryCancelRequested) return;
+            }
+
+            try {
+                this.discoveringSubcommands[command.id] = true;
+                const subcommands = await this.discoverSubcommandsInternal(command);
+
+                if (subcommands && subcommands.length > 0) {
+                    // Flattening: Add subcommands directly to the parent's subcommands list
+                    // If this is a deep subcommand, it still goes into the top-level command's subcommands list
+                    // to keep the UI flat as requested.
+
+                    // Find the top-level parent
+                    let topLevelCmd = command;
+                    while (topLevelCmd.parentCmd) {
+                        topLevelCmd = topLevelCmd.parentCmd;
+                    }
+
+                    if (!topLevelCmd.subcommands) topLevelCmd.subcommands = [];
+
+                    for (const sub of subcommands) {
+                        // Link back for recursion
+                        sub.parentCmd = command;
+
+                        // Calculate display name relative to top-level command
+                        // e.g. if top-level is 'shell' and this is 'shell echo off', name = 'echo off'
+                        if (sub.fullName) {
+                            const topLevelName = topLevelCmd.name;
+                            if (sub.fullName.startsWith(topLevelName + ' ')) {
+                                sub.name = sub.fullName.substring(topLevelName.length + 1).trim();
+                            }
+                        }
+
+                        // Add to top-level list if not already there (by fullName)
+                        if (!topLevelCmd.subcommands.find(s => s.fullName === sub.fullName)) {
+                            topLevelCmd.subcommands.push(sub);
+                        }
+
+                        // Recurse into this subcommand
+                        await this.discoverDeep(sub);
+                    }
+
+                    topLevelCmd.hasSubcommands = true;
+                    this.saveCachedCommands(this.commands);
+                }
+            } catch (error) {
+                console.error(`Error in deep discovery for ${command.fullName || command.name}:`, error);
+            } finally {
+                this.discoveringSubcommands[command.id] = false;
+            }
+        },
+
+        continueDiscovery() {
+            this.showDiscoveryConfirm = false;
+            this.discoveryPaused = false;
+        },
+
+        cancelDiscovery() {
+            this.discoveryCancelRequested = true;
+            this.discoveryPaused = false;
+            this.showDiscoveryConfirm = false;
+        },
+
+        // Internal subcommand discovery (returns found subcommands)
         async discoverSubcommandsInternal(command) {
             this.commandDiscoveryInProgress = true;
             this.discoveryCollectedData = '';
 
             try {
-                console.log(`Discovering subcommands for: ${command.name} `);
+                const cmdName = command.fullName || command.name;
+                console.log(`Discovering subcommands for: ${cmdName}`);
 
-                // Send '<command> --help' to get subcommands (Zephyr shell syntax)
-                this.sendDiscoveryCommand(`${command.name} --help\n`);
+                // Send '<command> --help' to get subcommands
+                this.sendDiscoveryCommand(`${cmdName.trim()} --help\n`);
 
-                // Wait for discovery to complete (with shorter timeout for subcommands)
-                await this.waitForSubcommandDiscovery(2000); // 2 seconds
-
-                console.log(`Discovery complete.Collected ${this.discoveryCollectedData.length} chars`);
+                // Wait for discovery to complete
+                await this.waitForSubcommandDiscovery(2000);
 
                 // Parse subcommands from help output
-                const subcommands = this.parseSubcommands(this.discoveryCollectedData, command.name);
+                const subcommands = this.parseSubcommands(this.discoveryCollectedData, cmdName.trim());
 
-                if (subcommands.length > 0) {
-                    // Update command with subcommands
-                    command.subcommands = subcommands;
-                    command.hasSubcommands = true;
+                // Small delay to avoid overwhelming the shell
+                await new Promise(resolve => setTimeout(resolve, 50));
 
-                    // Update in commands array
-                    const cmdIndex = this.commands.findIndex(c => c.id === command.id);
-                    if (cmdIndex !== -1) {
-                        this.commands[cmdIndex] = command;
-                    }
-
-                    // Save updated cache
-                    this.saveCachedCommands(this.commands);
-
-                    console.log(`Found ${subcommands.length} subcommands for ${command.name}`);
-                } else {
-                    command.hasSubcommands = false;
-                    console.log(`No subcommands found for ${command.name}`);
-                }
+                return subcommands;
             } catch (error) {
                 console.error('Error discovering subcommands:', error);
+                return [];
             } finally {
                 this.commandDiscoveryInProgress = false;
             }
@@ -1851,17 +1897,25 @@ function terminalApp() {
                 }
 
                 if (inSubcommandSection) {
-                    // Match subcommand line: "subcommand_name : Description"
-                    // Also try to match: "  subcommand_name  Description" (without colon)
+                    // Robust subcommand discovery:
+                    // 1. "subcommand : Description"
+                    // 2. "subcommand Description" (multiple spaces)
                     let cmdMatch = line.match(/^(\w[\w_-]*)\s+:\s*(.*)$/);
-
                     if (!cmdMatch) {
-                        // Try alternative format: "  subcommand_name  Description"
                         cmdMatch = line.match(/^(\w[\w_-]+)\s{2,}(.+)$/);
                     }
 
+                    // Specific case: dynamic subcommands/args look like <arg> or [arg]
+                    // If the "subcommand name" starts with < or [, it's likely an argument, not a command.
                     if (cmdMatch) {
                         const subCmdName = cmdMatch[1];
+
+                        // If it's a dynamic argument, don't treat as a subcommand for recursion
+                        if (subCmdName.startsWith('<') || subCmdName.startsWith('[')) {
+                            console.log(`  ! Skipping dynamic argument as subcommand: ${subCmdName}`);
+                            continue;
+                        }
+
                         let subCmdDesc = cmdMatch[2].trim();
                         let usage = '';
 
