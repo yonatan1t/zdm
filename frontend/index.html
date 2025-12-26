@@ -127,7 +127,114 @@
         class="h-screen flex flex-col">
         <!-- Modern Header -->
         <header
-            class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 shadow-sm dark:shadow-lg transition-colors duration-200">
+            class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 shadow-sm dark:shadow-lg transition-colors duration-200 flex flex-col">
+
+            <!-- Menu Bar -->
+            <div
+                class="px-2 py-1 flex items-center bg-gray-100 dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 text-xs select-none text-slate-700 dark:text-white">
+                <!-- File Menu -->
+                <div class="relative" @click.away="if(activeMenu==='file') closeMenu()">
+                    <button @click="openMenu('file')"
+                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
+                        :class="activeMenu === 'file' ? 'bg-gray-200 dark:bg-slate-700' : ''">File</button>
+                    <div x-show="activeMenu === 'file'"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        style="display: none;">
+                        <button @click="newProject(); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">New
+                            Project</button>
+                        <button @click="triggerOpenProject(); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Open
+                            Project...</button>
+                        <hr class="my-1 border-gray-200 dark:border-slate-700">
+                        <button @click="saveProject(); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Save
+                            Project</button>
+                        <button @click="saveProject(true); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Save
+                            Project As...</button>
+                        <hr class="my-1 border-gray-200 dark:border-slate-700">
+                        <button @click="activeView = 'settings'; closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Settings</button>
+                        <hr class="my-1 border-gray-200 dark:border-slate-700">
+                        <button @click="disconnect(); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 text-rose-500">Disconnect</button>
+                    </div>
+                </div>
+                <!-- Hidden File Input for Open Project -->
+                <input type="file" id="projectFileInput" class="hidden" accept=".zp" @change="loadProject($event)">
+
+                <!-- Edit Menu -->
+                <div class="relative" @click.away="if(activeMenu==='edit') closeMenu()">
+                    <button @click="openMenu('edit')"
+                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
+                        :class="activeMenu === 'edit' ? 'bg-gray-200 dark:bg-slate-700' : ''">Edit</button>
+                    <div x-show="activeMenu === 'edit'"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        style="display: none;">
+                        <button @click="if(terminal) terminal.selectAll(); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Select
+                            All</button>
+                        <button @click="if(terminal) terminal.clear(); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Clear
+                            Terminal</button>
+                    </div>
+                </div>
+
+                <!-- Run Menu -->
+                <div class="relative" @click.away="if(activeMenu==='run') closeMenu()">
+                    <button @click="openMenu('run')"
+                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
+                        :class="activeMenu === 'run' ? 'bg-gray-200 dark:bg-slate-700' : ''">Run</button>
+                    <div x-show="activeMenu === 'run'"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        style="display: none;">
+                        <button @click="toggleConnection(); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">
+                            <span x-text="connected ? 'Disconnect' : 'Connect'"></span>
+                        </button>
+                        <button @click="if(connected) { if(ws) ws.send('\x03'); } closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Send
+                            Ctrl+C</button>
+                    </div>
+                </div>
+
+                <!-- Tools Menu -->
+                <div class="relative" @click.away="if(activeMenu==='tools') closeMenu()">
+                    <button @click="openMenu('tools')"
+                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
+                        :class="activeMenu === 'tools' ? 'bg-gray-200 dark:bg-slate-700' : ''">Tools</button>
+                    <div x-show="activeMenu === 'tools'"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        style="display: none;">
+                        <button @click="activeView = 'commands'; closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Command
+                            Palette</button>
+                        <button @click="activeView = 'repeat'; closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Repeat
+                            Commands</button>
+                    </div>
+                </div>
+
+                <!-- Help Menu -->
+                <div class="relative" @click.away="if(activeMenu==='help') closeMenu()">
+                    <button @click="openMenu('help')"
+                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
+                        :class="activeMenu === 'help' ? 'bg-gray-200 dark:bg-slate-700' : ''">Help</button>
+                    <div x-show="activeMenu === 'help'"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        style="display: none;">
+                        <button @click="alert('Zephyr Device Manager v1.0'); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">About</button>
+                        <button
+                            @click="window.open('https://docs.zephyrproject.org/latest/index.html', '_blank'); closeMenu()"
+                            class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Zephyr
+                            Docs</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Toolbar -->
             <div class="px-6 py-3 flex items-center justify-between">
                 <div class="flex items-center space-x-6">
                     <div class="flex items-center space-x-3">

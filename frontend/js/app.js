@@ -19,7 +19,12 @@ function terminalApp() {
         currentPort: '',
         activeView: 'commands', // VSCode-style sidebar view
         sidebarWidth: 320,
+        activeView: 'commands', // VSCode-style sidebar view
+        sidebarWidth: 320,
         isResizing: false,
+
+        // Toolbar State
+        activeMenu: null,
 
         // Multi-session & Layout state
         sessions: [], // Array of { id, port, baudrate, connected, terminal, fitAddon, ws, promptBuffer }
@@ -288,6 +293,147 @@ function terminalApp() {
             localStorage.setItem('zdm_theme', this.theme);
             this.updateThemeClass();
             this.refreshTerminalThemes();
+        },
+
+        // Menu Bar Helpers
+        openMenu(name) {
+            this.activeMenu = this.activeMenu === name ? null : name;
+        },
+        closeMenu() {
+            this.activeMenu = null;
+        },
+
+        // Project Persistence
+        newProject() {
+            if (confirm('Create new project? Unsaved changes will be lost.')) {
+                this.sessions.forEach(s => {
+                    if (s.ws) s.ws.close();
+                });
+                this.sessions = [];
+                this.layoutGroups = [];
+                this.savedCommands = [];
+                this.activeView = 'commands';
+                this.currentPort = '';
+                this.baudrate = 115200;
+                // Keep theme as is, or reset? Let's keep it.
+            }
+        },
+
+        saveProject(saveAs = false) {
+            let filename = "project.zp";
+            if (saveAs) {
+                const name = prompt("Enter project filename:", "project");
+                if (!name) return; // User cancelled
+                filename = name.endsWith('.zp') ? name : name + '.zp';
+            }
+
+            const project = {
+                meta: {
+                    version: "1.0",
+                    created: new Date().toISOString()
+                },
+                settings: {
+                    theme: this.theme,
+                    sidebarWidth: this.sidebarWidth,
+                    activeView: this.activeView
+                },
+                sessions: this.sessions.map(s => ({
+                    id: s.id,
+                    port: s.port,
+                    baudrate: s.baudrate,
+                    // We don't save the actual connection state or terminal content, 
+                    // just the configuration to restore the tab.
+                })),
+                layoutGroups: this.layoutGroups,
+                data: {
+                    savedCommands: this.savedCommands,
+                    repeatCommands: this.repeatCommands
+                }
+            };
+
+            const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        },
+
+        triggerOpenProject() {
+            document.getElementById('projectFileInput').click();
+        },
+
+        async loadProject(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const text = await file.text();
+            try {
+                const project = JSON.parse(text);
+
+                // version check could go here
+
+                // Restore settings
+                if (project.settings) {
+                    if (project.settings.theme && project.settings.theme !== this.theme) {
+                        this.toggleTheme(); // or just set it
+                    }
+                    if (project.settings.sidebarWidth) this.sidebarWidth = project.settings.sidebarWidth;
+                    if (project.settings.activeView) this.activeView = project.settings.activeView;
+                }
+
+                // Restore Data
+                if (project.data) {
+                    this.savedCommands = project.data.savedCommands || [];
+                    this.repeatCommands = project.data.repeatCommands || [];
+                }
+
+                // Restore Sessions (Closed state)
+                if (project.sessions) {
+                    // Close existing
+                    this.sessions.forEach(s => { if (s.ws) s.ws.close(); });
+                    this.sessions = [];
+
+                    // Re-create tabs
+                    project.sessions.forEach(sConfig => {
+                        const newSession = {
+                            id: sConfig.id,
+                            port: sConfig.port,
+                            baudrate: sConfig.baudrate,
+                            connected: false,
+                            terminal: null,
+                            fitAddon: null,
+                            ws: null,
+                            promptBuffer: ''
+                        };
+                        this.sessions.push(newSession);
+                        // We will need to init terminal UI for these, relying on Alpine's x-for to render them
+                        // and then $nextTick to init xterm? 
+                        // Actually, initTerminal is called in x-init of the *tab content*.
+                        // When we push to sessions, the DOM updates.
+                    });
+                }
+
+                // Restore Layout
+                if (project.layoutGroups) {
+                    this.layoutGroups = project.layoutGroups;
+                } else {
+                    // If no layout groups, imply default if sessions exist?
+                    // Existing logic handles simple sessions array usually.
+                }
+
+                alert('Project loaded successfully!');
+
+            } catch (e) {
+                console.error("Failed to load project", e);
+                alert('Error loading project file');
+            }
+
+            // Reset input
+            event.target.value = '';
         },
 
         refreshTerminalThemes() {
