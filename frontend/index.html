@@ -125,20 +125,29 @@
 <body class="bg-gray-50 dark:bg-slate-900 transition-colors duration-200">
     <div x-data="terminalApp()" @mousemove.window="doResize" @mouseup.window="stopResizing"
         class="h-screen flex flex-col">
-        <!-- Modern Header -->
         <header
-            class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 shadow-sm dark:shadow-lg transition-colors duration-200 flex flex-col">
+            class="bg-gray-100 dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 shadow-sm transition-colors duration-200 flex items-center px-3 py-1.5 select-none text-xs h-10 shrink-0">
 
-            <!-- Menu Bar -->
-            <div
-                class="px-2 py-1 flex items-center bg-gray-100 dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 text-xs select-none text-slate-700 dark:text-white">
+            <!-- App Icon -->
+            <div class="mr-4 flex items-center justify-center">
+                <div
+                    class="w-6 h-6 bg-gradient-to-br from-indigo-500 to-purple-600 rounded flex items-center justify-center shadow-sm">
+                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Menu Items -->
+            <div class="flex items-center space-x-1 text-slate-700 dark:text-slate-300">
                 <!-- File Menu -->
                 <div class="relative" @click.away="if(activeMenu==='file') closeMenu()">
-                    <button @click="openMenu('file')"
-                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
-                        :class="activeMenu === 'file' ? 'bg-gray-200 dark:bg-slate-700' : ''">File</button>
+                    <button @click="openMenu('file')" class="px-3 py-1 rounded transition-colors"
+                        :class="activeMenu === 'file' ? 'bg-gray-200 dark:bg-slate-700 text-slate-900 dark:text-white' : 'hover:bg-gray-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'">File</button>
                     <div x-show="activeMenu === 'file'"
-                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg z-50 py-1"
                         style="display: none;">
                         <button @click="newProject(); closeMenu()"
                             class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">New
@@ -166,11 +175,10 @@
 
                 <!-- Edit Menu -->
                 <div class="relative" @click.away="if(activeMenu==='edit') closeMenu()">
-                    <button @click="openMenu('edit')"
-                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
-                        :class="activeMenu === 'edit' ? 'bg-gray-200 dark:bg-slate-700' : ''">Edit</button>
+                    <button @click="openMenu('edit')" class="px-3 py-1 rounded transition-colors"
+                        :class="activeMenu === 'edit' ? 'bg-gray-200 dark:bg-slate-700 text-slate-900 dark:text-white' : 'hover:bg-gray-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'">Edit</button>
                     <div x-show="activeMenu === 'edit'"
-                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg z-50 py-1"
                         style="display: none;">
                         <button @click="if(terminal) terminal.selectAll(); closeMenu()"
                             class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Select
@@ -183,11 +191,10 @@
 
                 <!-- Run Menu -->
                 <div class="relative" @click.away="if(activeMenu==='run') closeMenu()">
-                    <button @click="openMenu('run')"
-                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
-                        :class="activeMenu === 'run' ? 'bg-gray-200 dark:bg-slate-700' : ''">Run</button>
+                    <button @click="openMenu('run')" class="px-3 py-1 rounded transition-colors"
+                        :class="activeMenu === 'run' ? 'bg-gray-200 dark:bg-slate-700 text-slate-900 dark:text-white' : 'hover:bg-gray-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'">Run</button>
                     <div x-show="activeMenu === 'run'"
-                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg z-50 py-1"
                         style="display: none;">
                         <button @click="toggleConnection(); closeMenu()"
                             class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">
@@ -201,11 +208,10 @@
 
                 <!-- Tools Menu -->
                 <div class="relative" @click.away="if(activeMenu==='tools') closeMenu()">
-                    <button @click="openMenu('tools')"
-                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
-                        :class="activeMenu === 'tools' ? 'bg-gray-200 dark:bg-slate-700' : ''">Tools</button>
+                    <button @click="openMenu('tools')" class="px-3 py-1 rounded transition-colors"
+                        :class="activeMenu === 'tools' ? 'bg-gray-200 dark:bg-slate-700 text-slate-900 dark:text-white' : 'hover:bg-gray-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'">Tools</button>
                     <div x-show="activeMenu === 'tools'"
-                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg z-50 py-1"
                         style="display: none;">
                         <button @click="activeView = 'commands'; closeMenu()"
                             class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">Command
@@ -218,11 +224,10 @@
 
                 <!-- Help Menu -->
                 <div class="relative" @click.away="if(activeMenu==='help') closeMenu()">
-                    <button @click="openMenu('help')"
-                        class="px-3 py-1 hover:bg-gray-200 dark:hover:bg-slate-700 rounded transition-colors text-slate-700 dark:text-white"
-                        :class="activeMenu === 'help' ? 'bg-gray-200 dark:bg-slate-700' : ''">Help</button>
+                    <button @click="openMenu('help')" class="px-3 py-1 rounded transition-colors"
+                        :class="activeMenu === 'help' ? 'bg-gray-200 dark:bg-slate-700 text-slate-900 dark:text-white' : 'hover:bg-gray-200 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'">Help</button>
                     <div x-show="activeMenu === 'help'"
-                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-sm z-50 py-1"
+                        class="absolute left-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-lg shadow-lg z-50 py-1"
                         style="display: none;">
                         <button @click="alert('Zephyr Device Manager v1.0'); closeMenu()"
                             class="w-full text-left px-4 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 dark:text-white">About</button>
@@ -234,60 +239,25 @@
                 </div>
             </div>
 
-            <!-- Main Toolbar -->
-            <div class="px-6 py-3 flex items-center justify-between">
-                <div class="flex items-center space-x-6">
-                    <div class="flex items-center space-x-3">
-                        <div
-                            class="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
-                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
-                                </path>
-                            </svg>
-                        </div>
-                        <div>
-                            <h1
-                                class="text-lg font-bold text-gray-900 dark:text-slate-100 transition-colors duration-200">
-                                Zephyr Device Manager</h1>
-                            <p class="text-xs text-gray-500 dark:text-slate-400 transition-colors duration-200">Serial
-                                Terminal Interface</p>
-                        </div>
-                    </div>
+            <!-- Spacer -->
+            <div class="flex-1"></div>
 
-                    <div
-                        class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 transition-colors duration-200">
-                        <div class="relative">
-                            <div class="w-2.5 h-2.5 rounded-full"
-                                :class="connected ? 'bg-emerald-500' : 'bg-gray-400 dark:bg-slate-500'"></div>
-                            <div x-show="connected"
-                                class="absolute inset-0 w-2.5 h-2.5 rounded-full bg-emerald-500 status-pulse"></div>
-                        </div>
-                        <span class="text-sm font-medium"
-                            :class="connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-slate-400'"
-                            x-text="connected ? 'Connected' : 'Disconnected'"></span>
-                        <span x-show="connected && currentPort"
-                            class="text-xs text-gray-500 dark:text-slate-400 font-mono transition-colors duration-200"
-                            x-text="currentPort"></span>
+            <!-- Right-side Connection Indicator -->
+            <div class="flex items-center space-x-3 mr-2">
+                <div class="flex items-center space-x-2 px-2 py-1 rounded-md transition-colors duration-200"
+                    :class="connected ? 'bg-emerald-500/10 dark:bg-emerald-500/20' : 'bg-gray-200 dark:bg-slate-800'">
+                    <div class="relative flex items-center justify-center">
+                        <div class="w-2 h-2 rounded-full"
+                            :class="connected ? 'bg-emerald-500' : 'bg-gray-400 dark:bg-slate-500'"></div>
+                        <div x-show="connected"
+                            class="absolute inset-0 w-2 h-2 rounded-full bg-emerald-500 status-pulse"></div>
                     </div>
-                </div>
-
-                <div class="flex items-center space-x-3">
-                    <button @click="toggleConnection()"
-                        class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-lg transition-all"
-                        :class="connected ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white'">
-                        <svg x-show="!connected" class="w-4 h-4 mr-2" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                        </svg>
-                        <svg x-show="connected" class="w-4 h-4 mr-2" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                        <span x-text="connected ? 'Disconnect' : 'Connect'"></span>
-                    </button>
+                    <span class="text-[11px] font-medium"
+                        :class="connected ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-500 dark:text-slate-400'"
+                        x-text="connected ? 'Connected' : 'Disconnected'"></span>
+                    <span x-show="connected && currentPort"
+                        class="text-[11px] text-gray-500 dark:text-slate-400 font-mono border-l border-gray-300 dark:border-slate-600 pl-2 ml-1"
+                        x-text="currentPort"></span>
                 </div>
             </div>
         </header>
@@ -986,7 +956,8 @@
 
 
                         <!-- Pane Tab Bar -->
-                        <div class="flex bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 overflow-x-auto no-scrollbar transition-colors duration-200"
+                        <div x-show="group.sessionIds.length > 0"
+                            class="flex bg-gray-50 dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 overflow-x-auto no-scrollbar transition-colors duration-200"
                             @dragover.stop="handleDragOver($event, group.id, 'center')">
                             <template x-for="sid in group.sessionIds" :key="sid">
                                 <div draggable="true" @dragstart="handleDragStart(sid)" @dragend="handleDragEnd()"
@@ -1027,7 +998,7 @@
                             </template>
 
                             <!-- Internal Empty State (Should rarely happen) -->
-                            <div x-show="group.sessionIds.length === 0"
+                            <div x-show="group.sessionIds.length === 0 && sessions.length > 0"
                                 class="flex items-center justify-center h-full text-gray-400 dark:text-slate-600 italic text-xs">
                                 No sessions in this pane
                             </div>
