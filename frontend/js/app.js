@@ -1534,6 +1534,20 @@ function terminalApp() {
             this.showDiscoveryConfirm = false;
         },
 
+        // Safe helper to get direct subcommands for the UI
+        getDirectSubcommands(command) {
+            if (!command) return [];
+
+            // Find top-level parent to look in its flattened subcommands list
+            let topLevel = command;
+            while (topLevel.parentCmd) {
+                topLevel = topLevel.parentCmd;
+            }
+
+            const parentFullName = (command.fullName || command.name).trim();
+            return (topLevel.subcommands || []).filter(s => s.parent === parentFullName);
+        },
+
         // Internal subcommand discovery (returns found subcommands)
         async discoverSubcommandsInternal(command) {
             this.commandDiscoveryInProgress = true;
