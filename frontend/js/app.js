@@ -1547,13 +1547,13 @@ function terminalApp() {
                 this.sendDiscoveryCommand(`${cmdName.trim()} --help\n`);
 
                 // Wait for discovery to complete
-                await this.waitForSubcommandDiscovery(2000);
+                await this.waitForSubcommandDiscovery(1200);
 
                 // Parse subcommands from help output
                 const subcommands = this.parseSubcommands(this.discoveryCollectedData, cmdName.trim());
 
-                // Small delay to avoid overwhelming the shell
-                await new Promise(resolve => setTimeout(resolve, 50));
+                // Minimal delay to avoid overwhelming the shell
+                await new Promise(resolve => setTimeout(resolve, 10));
 
                 return subcommands;
             } catch (error) {
@@ -1663,11 +1663,28 @@ function terminalApp() {
                         }
                     }
 
-                    // Check if data has stopped changing (no new data for 0.5 seconds)
+                    // Check if we have help output with commands
+                    if (this.discoveryCollectedData.includes('Available commands:')) {
+                        // If we also see the prompt, we are definitely done
+                        if (this.discoveryCollectedData.match(/[\$>] $/) || this.discoveryCollectedData.match(/\n.*[\$>] $/)) {
+                            const parsed = this.parseHelpOutput(this.discoveryCollectedData);
+                            if (parsed.length > 0) {
+                                resolved = true;
+                                this.commands = parsed;
+                                this.saveCachedCommands(parsed);
+                                this.commandDiscoveryInProgress = false;
+                                console.log('✓ Discovery successful (prompt detected) with', parsed.length, 'commands');
+                                resolve();
+                                return;
+                            }
+                        }
+                    }
+
+                    // Check if data has stopped changing (no new data for 0.2 seconds)
                     if (this.discoveryCollectedData.length === lastDataLength) {
                         noDataChangedCount++;
-                        if (noDataChangedCount >= 2) { // 0.5 seconds with no change (2 * 250ms)
-                            console.log('No new data for 0.5 seconds, treating as complete');
+                        if (noDataChangedCount >= 3) { // 150ms with no change (3 * 50ms)
+                            console.log('No new data for 150ms, treating as complete');
                             const parsed = this.parseHelpOutput(this.discoveryCollectedData);
                             if (parsed.length > 0) {
                                 resolved = true;
@@ -1677,9 +1694,7 @@ function terminalApp() {
                                 resolve();
                                 return;
                             } else {
-                                // No commands found - reject instead of looping
                                 resolved = true;
-                                console.log('✗ Data stable but no commands found. Raw data length:', this.discoveryCollectedData.length);
                                 reject(new Error('No commands found in help output'));
                                 return;
                             }
@@ -1692,13 +1707,12 @@ function terminalApp() {
                     // Check timeout
                     if (Date.now() - startTime > timeout) {
                         resolved = true;
-                        console.log('✗ Timeout reached. Final data length:', this.discoveryCollectedData.length);
-                        reject(new Error('Command discovery timeout - no valid help output received'));
+                        reject(new Error('Command discovery timeout'));
                         return;
                     }
 
-                    // Try again in 250ms
-                    setTimeout(checkCompletion, 100);
+                    // Try again in 50ms
+                    setTimeout(checkCompletion, 50);
                 };
 
                 checkCompletion();
@@ -1717,18 +1731,22 @@ function terminalApp() {
                     if (resolved) return;
 
                     const elapsed = Date.now() - startTime;
-                    console.log(`Subcommand discovery check: data length = ${this.discoveryCollectedData.length}, elapsed = ${elapsed} ms`);
 
-                    // Check if data has stopped changing (no new data for 0.4 seconds)
+                    // FAST PATH: Check if we have the prompt at the end of the buffer
+                    if (this.discoveryCollectedData.length > 5 &&
+                        (this.discoveryCollectedData.match(/[\$>] $/) || this.discoveryCollectedData.match(/\n.*[\$>] $/))) {
+                        console.log('Prompt detected, completing discovery immediately');
+                        resolved = true;
+                        resolve();
+                        return;
+                    }
+
+                    // Check if data has stopped changing (no new data for 0.15 seconds)
                     if (this.discoveryCollectedData.length === lastDataLength) {
                         noDataChangedCount++;
-                        if (noDataChangedCount >= 2) { // 0.4 seconds with no change (2 * 200ms)
+                        if (noDataChangedCount >= 3) { // 150ms (3 * 50ms)
                             console.log('Data stable, completing discovery');
                             resolved = true;
-
-                            // Log the collected data for debugging
-                            console.log('Collected help output:', this.discoveryCollectedData.substring(0, 200));
-
                             resolve();
                             return;
                         }
@@ -1740,13 +1758,12 @@ function terminalApp() {
                     // Check timeout
                     if (elapsed > timeout) {
                         resolved = true;
-                        console.log('Timeout reached, completing with collected data');
-                        resolve(); // Resolve anyway with whatever data we have
+                        resolve();
                         return;
                     }
 
-                    // Try again in 200ms
-                    setTimeout(checkCompletion, 100);
+                    // Try again in 50ms
+                    setTimeout(checkCompletion, 50);
                 };
 
                 checkCompletion();
